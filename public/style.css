@@ -10,17 +10,36 @@
   --warn: #e5b567;
   --bad: #e57373;
   --radius: 10px;
+
+  /* Depth: borders that read as edges, and shadows that lift the surfaces
+     you act on off the page behind them. */
+  --line-strong: #444b57;
+  --accent-strong: #5b9bff;
+  --accent-soft: rgba(124, 176, 255, 0.14);
+  --button-top: #2a2f38;
+  --button-bottom: #22262e;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
+  --shadow-accent: 0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 10px rgba(91, 155, 255, 0.28);
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f5f6f8;
+    --bg: #e9edf2;
     --panel: #ffffff;
-    --panel-2: #eef0f4;
-    --line: #d8dce3;
-    --text: #1a1d23;
-    --muted: #5f6775;
-    --accent: #1f6feb;
+    --panel-2: #e4e9f0;
+    --line: #cdd4de;
+    --text: #141821;
+    --muted: #4f5868;
+    --accent: #1c63d6;
+    --line-strong: #aeb7c4;
+    --accent-strong: #1452b8;
+    --accent-soft: rgba(28, 99, 214, 0.1);
+    --button-top: #ffffff;
+    --button-bottom: #f1f4f8;
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08), 0 1px 1px rgba(16, 24, 40, 0.04);
+    --shadow-md: 0 1px 3px rgba(16, 24, 40, 0.08), 0 6px 16px rgba(16, 24, 40, 0.08);
+    --shadow-accent: 0 1px 2px rgba(16, 24, 40, 0.15), 0 3px 10px rgba(28, 99, 214, 0.3);
     --ok: #1f9254;
     --warn: #a76a06;
     --bad: #c0392b;
@@ -1025,3 +1044,78 @@ a { color: var(--accent); }
   font-size: 0.8rem;
   line-height: 1.45;
 }
+
+/* ---------------------------------------------------------------- depth
+   A layer over the rules above: raised cards for the things you read and
+   act on, buttons that look pressable, and stronger edges on form fields,
+   so the working parts of the page stand out from the background. */
+
+.menubar { box-shadow: 0 1px 0 var(--line), 0 2px 10px rgba(16, 24, 40, 0.06); border-bottom-color: transparent; }
+.tab.active, .tab[aria-selected="true"], .tab[aria-selected="true"]:hover { border-bottom-width: 3px; color: var(--accent); }
+
+/* Cards: the items on every list, and the working sections of Add/Remove. */
+.item { box-shadow: var(--shadow-sm); transition: box-shadow 0.15s, border-color 0.15s; }
+.shelf .item:hover, #feeds .item:hover, #results .item:hover { box-shadow: var(--shadow-md); border-color: var(--line-strong); }
+.column > section:not(.drop) {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+.drop { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+.drop:hover { border-color: var(--accent); background: var(--accent-soft); }
+#read-onboarding, .discover, .dialog { box-shadow: var(--shadow-md); }
+.empty-note { background: color-mix(in srgb, var(--panel) 65%, transparent); border-color: var(--line-strong); }
+
+/* Buttons: a slight gradient, edge and shadow, pressed in when clicked. */
+.secondary, .danger, .pending-badge, .discover-groups button, .dialog-actions .secondary {
+  background: linear-gradient(var(--button-top), var(--button-bottom));
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+.secondary { color: var(--text); font-weight: 500; }
+.secondary:hover:not(:disabled), .discover-groups button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+.secondary:active:not(:disabled), .primary:active:not(:disabled), .danger:active:not(:disabled) {
+  box-shadow: inset 0 1px 3px rgba(16, 24, 40, 0.2);
+  transform: translateY(1px);
+}
+.primary {
+  background: linear-gradient(var(--accent), var(--accent-strong));
+  border-color: var(--accent-strong);
+  box-shadow: var(--shadow-accent);
+}
+.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--accent-strong); }
+.danger { border-color: var(--bad); color: var(--bad); }
+.danger:hover:not(:disabled) { background: var(--bad); color: #fff; box-shadow: var(--shadow-md); }
+.pending-badge { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.discover-groups button[aria-pressed="true"] { background: linear-gradient(var(--accent), var(--accent-strong)); border-color: var(--accent-strong); }
+button:disabled { box-shadow: none; filter: saturate(0.6); }
+
+/* Form fields: a clear edge, a hint of inset, and a focus ring. */
+select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  font-size: 0.88rem;
+}
+textarea, input[type="text"], input[type="number"], select {
+  border-color: var(--line-strong);
+  box-shadow: inset 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+textarea:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Headings carry the structure, so give them full contrast. */
+h2, .column-title { color: var(--text); }
+
