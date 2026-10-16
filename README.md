@@ -484,3 +484,7 @@ PNGs and sampling pixels, since a blank page is still a valid PNG.
 - The queue, drafts and feeds all persist across restarts. Deleting `out/`
   discards queued EPUBs; the index notices and drops those entries.
 - The reader is 2.4 GHz only, and must be on the same network as this Mac.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright © 2026 Dan Pacheco ([danpacheco.com](https://danpacheco.com)).

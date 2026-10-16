@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "A-pub reader \u2014 build EPUBs from PDFs, web pages, feeds and your own writing, and send them to an Xteink reader",
+  "description": "A-pub reader — build EPUBs from PDFs, web pages, feeds and your own writing, and send them to an Xteink reader",
+  "author": "Dan Pacheco (https://danpacheco.com)",
+  "license": "MIT",
   "scripts": {
     "start": "node server.mjs",
     "test": "node test/convert.test.mjs && node test/pdf.test.mjs && node test/drafts.test.mjs && node test/images.test.mjs && node test/volume.test.mjs && node test/feeds.test.mjs && node test/httperror.test.mjs && node test/books.test.mjs && node test/outbox.test.mjs && node test/removals.test.mjs && node test/epubread.test.mjs && node test/device.test.mjs && node test/server.test.mjs"
