@@ -1,0 +1,212 @@
+#!/bin/bash
+# A-pub reader launcher.
+#
+# Runs in the foreground so Ctrl-C stops the server, which is what you expect
+# from a terminal command. `start -b` detaches it instead.
+#
+#   epub-drop              start and open the browser
+#   epub-drop -n           start without opening the browser
+#   epub-drop -b           start detached, then return the prompt
+#   epub-drop stop         stop a running instance
+#   epub-drop status       report whether it's running
+#   epub-drop logs         follow the detached instance's log
+#   epub-drop update       reinstall dependencies
+#
+# PORT=5000 epub-drop      use a different port
+
+set -u
+
+# Either `a-pub` or `epub-drop` may invoke this; echo back the one used.
+CMD="$(basename "$0")"
+
+# Resolve symlinks so this works when installed on PATH.
+SELF="${BASH_SOURCE[0]}"
+while [ -L "$SELF" ]; do
+  LINK="$(readlink "$SELF")"
+  case "$LINK" in
+    /*) SELF="$LINK" ;;
+    *) SELF="$(dirname "$SELF")/$LINK" ;;
+  esac
+done
+APP_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+
+PORT="${PORT:-4321}"
+# --watch restarts the server when its own source changes, so an edit is live at
+# the URL on the next reload instead of needing a manual stop/start. It watches
+# the imported module graph only, so writing a book or a config file does not
+# bounce it. NO_WATCH=1 opts out.
+if [ -z "${NO_WATCH:-}" ]; then NODE_FLAGS="--watch"; else NODE_FLAGS=""; fi
+URL="http://localhost:$PORT"
+LOG="$APP_DIR/epub-drop.log"
+PIDFILE="$APP_DIR/.epub-drop.pid"
+
+is_up() { curl -s -o /dev/null --max-time 2 "$URL"; }
+
+wait_for_up() {
+  for _ in $(seq 1 60); do
+    is_up && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+require_node() {
+  command -v node >/dev/null 2>&1 && return 0
+  echo "Node.js isn't installed, or isn't on this shell's PATH." >&2
+  echo "Install it from https://nodejs.org or with: brew install node" >&2
+  return 1
+}
+
+install_deps() {
+  echo "Installing dependencies (one time, ~30 seconds)…"
+  (cd "$APP_DIR" && npm install --no-audit --no-fund) || {
+    echo "Dependency install failed — see the output above." >&2
+    return 1
+  }
+}
+
+ensure_deps() {
+  [ -d "$APP_DIR/node_modules" ] || install_deps
+}
+
+running_pid() {
+  # Trust the pidfile only if that process is still alive.
+  if [ -f "$PIDFILE" ]; then
+    local pid
+    pid="$(cat "$PIDFILE" 2>/dev/null)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      echo "$pid"
+      return 0
+    fi
+    rm -f "$PIDFILE"
+  fi
+  return 1
+}
+
+cmd_stop() {
+  # Identify the server by what is listening on the port, not by its command
+  # line: started from the app directory it runs as plain `node server.mjs`, so
+  # matching on a path finds nothing. Only kill when our app actually answers
+  # there, so an unrelated service holding the port is left alone.
+  local pids=""
+  local was_up=0
+  is_up && was_up=1
+
+  local pid
+  if pid="$(running_pid)"; then pids="$pid"; fi
+
+  if [ "$was_up" -eq 1 ] && command -v lsof >/dev/null 2>&1; then
+    local listening
+    listening="$(lsof -ti "tcp:$PORT" 2>/dev/null)"
+    pids="$pids $listening"
+  fi
+
+  # De-duplicate.
+  pids="$(echo "$pids" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u | tr '\n' ' ')"
+  rm -f "$PIDFILE"
+
+  if [ -z "${pids// /}" ]; then
+    echo "Wasn't running."
+    return 0
+  fi
+
+  for p in $pids; do kill "$p" 2>/dev/null; done
+
+  # Give it a moment, then escalate if it's still holding the port.
+  for _ in $(seq 1 20); do
+    is_up || break
+    sleep 0.25
+  done
+  if is_up; then
+    for p in $pids; do kill -9 "$p" 2>/dev/null; done
+    sleep 0.5
+  fi
+
+  if is_up; then
+    echo "Still responding at $URL — something else may be on that port." >&2
+    return 1
+  fi
+  echo "Stopped."
+}
+
+cmd_status() {
+  if is_up; then
+    echo "Running at $URL"
+    local reader
+    reader="$(curl -s --max-time 3 "$URL/api/config" 2>/dev/null)"
+    [ -n "$reader" ] && echo "Settings: $reader"
+  else
+    echo "Not running. Start it with: $CMD"
+  fi
+}
+
+cmd_start() {
+  local open_browser=1 background=0
+  for arg in "$@"; do
+    case "$arg" in
+      -n|--no-open) open_browser=0 ;;
+      -b|--background) background=1 ;;
+      *) echo "Unknown option: $arg" >&2; return 2 ;;
+    esac
+  done
+
+  if is_up; then
+    echo "Already running at $URL"
+    [ "$open_browser" -eq 1 ] && open "$URL"
+    return 0
+  fi
+
+  require_node || return 1
+  ensure_deps || return 1
+
+  if [ "$background" -eq 1 ]; then
+    (cd "$APP_DIR" && PORT="$PORT" nohup node $NODE_FLAGS server.mjs >"$LOG" 2>&1 & echo $! >"$PIDFILE")
+    if wait_for_up; then
+      echo "Running in the background at $URL"
+      echo "Log: $LOG   Stop with: $CMD stop"
+      [ "$open_browser" -eq 1 ] && open "$URL"
+    else
+      echo "Didn't come up. Last lines of $LOG:" >&2
+      tail -20 "$LOG" >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  cd "$APP_DIR" || return 1
+  PORT="$PORT" node $NODE_FLAGS server.mjs &
+  local pid=$!
+  trap 'kill '"$pid"' 2>/dev/null' EXIT INT TERM
+
+  if wait_for_up && [ "$open_browser" -eq 1 ]; then
+    open "$URL"
+  fi
+  echo "Ctrl-C to stop."
+  wait "$pid"
+}
+
+case "${1:-start}" in
+  start) shift $(( $# > 0 ? 1 : 0 )); cmd_start "$@" ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  logs) tail -f "$LOG" ;;
+  update) require_node && install_deps ;;
+  -h|--help|help)
+    cat <<USAGE
+A-pub reader — build EPUBs and send them to an Xteink reader.
+
+  $CMD              start and open the browser (Ctrl-C to stop)
+  $CMD -n           start without opening the browser
+  $CMD -b           start detached and return the prompt
+  $CMD stop         stop a running instance
+  $CMD status       report whether it is running
+  $CMD logs         follow the detached log
+  $CMD update       reinstall dependencies
+
+  PORT=5000 $CMD    use a different port
+  NO_WATCH=1 $CMD   don't restart when the source changes
+USAGE
+    ;;
+  -*) cmd_start "$@" ;;
+  *) echo "Unknown command: $1" >&2; echo "Try: $CMD --help" >&2; exit 2 ;;
+esac

@@ -1,0 +1,133 @@
+/* The web reading page (/read/<id>): a built book as one long, plain page. */
+
+:root {
+  --bg: #fbfaf7;
+  --panel: #ffffff;
+  --line: #e2dfd8;
+  --text: #1d1c1a;
+  --muted: #6b6760;
+  --accent: #1f6feb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --line: #31363f;
+    --text: #e7e9ee;
+    --muted: #9aa2b1;
+    --accent: #7cb0ff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 4rem; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 19px/1.65 Charter, "Iowan Old Style", Georgia, "Times New Roman", serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+a { color: var(--accent); }
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.bar a { text-decoration: none; }
+.bar a:hover { text-decoration: underline; }
+.bar { height: 52px; padding-top: 0; padding-bottom: 0; }
+.brand { display: flex; align-items: center; gap: 0.55rem; color: var(--text) !important; font-weight: 600; font-size: 15px; }
+.brand img { display: block; }
+.brand:hover { text-decoration: none !important; }
+@media (max-width: 520px) { .brand span { display: none; } }
+.bar-actions { display: flex; gap: 1rem; }
+
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+.reading { min-width: 0; overflow-wrap: break-word; }
+
+/* Two columns on a wide screen: contents on the left, staying in view while
+   the text scrolls; the title and the text on the right. */
+@media (min-width: 960px) {
+  .page.has-toc {
+    max-width: 70rem;
+    display: grid;
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 40rem);
+    grid-template-areas:
+      "toc head"
+      "toc text";
+    grid-template-rows: auto 1fr;
+    column-gap: 3rem;
+    justify-content: center;
+    align-items: start;
+  }
+  .has-toc .book-head { grid-area: head; }
+  .has-toc .reading { grid-area: text; }
+  .has-toc .toc {
+    grid-area: toc;
+    position: sticky;
+    top: 4rem;
+    max-height: calc(100vh - 5rem);
+    overflow-y: auto;
+    margin: 0;
+    font-size: 14px;
+  }
+}
+
+.book-head { margin-bottom: 2rem; }
+.book-head h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 0.4rem; }
+.byline { margin: 0; color: var(--muted); font-style: italic; }
+.note {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+.toc {
+  margin: 0 0 2.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.toc h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
+.toc ol { margin: 0; padding-left: 1.4rem; }
+.toc li { margin: 0.2rem 0; }
+
+.chapter { padding-bottom: 2.5rem; margin-bottom: 2.5rem; border-bottom: 1px solid var(--line); }
+.chapter:last-of-type { border-bottom: 0; }
+.chapter h1, .chapter h2, .chapter h3 { line-height: 1.25; }
+.chapter h1 { font-size: 1.6rem; }
+.chapter h2 { font-size: 1.3rem; }
+.chapter img, .chapter svg { max-width: 100%; height: auto; }
+.chapter figure { margin: 1.5rem 0; }
+.chapter figcaption { color: var(--muted); font-size: 0.85em; }
+.chapter blockquote { margin: 1.2rem 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+.chapter pre { overflow-x: auto; font-size: 0.8em; }
+.chapter table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+
+.page-image { display: block; width: 100%; height: auto; margin: 0 0 1rem; border: 1px solid var(--line); }
+
+.book-foot {
+  margin-top: 2rem;
+  color: var(--muted);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}

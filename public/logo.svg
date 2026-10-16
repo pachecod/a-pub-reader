@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="A-Pub Reader">
+  <!-- An open book on a rounded tile: the left page white, the right a pale
+       blue, meeting at a spine down the middle. -->
+  <rect width="32" height="32" rx="7" fill="#1f6feb"/>
+  <path d="M6.5 9.2c3.4-1.3 6.6-1 9.5 1v13.6c-2.9-2-6.1-2.3-9.5-1z" fill="#ffffff"/>
+  <path d="M25.5 9.2c-3.4-1.3-6.6-1-9.5 1v13.6c2.9-2 6.1-2.3 9.5-1z" fill="#cfe0ff"/>
+  <path d="M16 10.2v13.6" stroke="#1f6feb" stroke-width="0.9"/>
+</svg>

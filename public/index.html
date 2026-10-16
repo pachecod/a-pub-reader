@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A-Pub Reader</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="menubar">
+  <a href="/" class="brand" aria-label="A-Pub Reader, home">
+    <img src="/logo.svg" alt="" width="28" height="28">
+    <h1>A-Pub Reader</h1>
+  </a>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" class="tab" data-tab="read" aria-selected="true"
+            aria-controls="tab-read" id="tabbtn-read">Read</button>
+    <button type="button" role="tab" class="tab" data-tab="add" aria-selected="false"
+            aria-controls="tab-add" id="tabbtn-add">Add/Remove</button>
+    <button type="button" role="tab" class="tab" data-tab="write" aria-selected="false"
+            aria-controls="tab-write" id="tabbtn-write">Write</button>
+  </nav>
+  <span class="menubar-spacer"></span>
+  <button type="button" id="pending-badge" class="pending-badge" hidden
+          title="Waiting to be sent — click to open Add">0 queued</button>
+</header>
+
+<main>
+
+  <!-- Shown only while feeds are being refreshed, including the automatic
+       refresh when the page loads. -->
+  <div id="feeds-refreshing" class="refresh-banner" role="status" hidden>
+    <span class="spinner" aria-hidden="true"></span>Refreshing Feeds
+  </div>
+
+  <div class="panel" id="tab-read" role="tabpanel" aria-labelledby="tabbtn-read">
+    <section id="read-onboarding" hidden>
+      <h2 class="onboard-title">Nothing to read yet</h2>
+      <p class="onboard-lead">
+        Anything you add shows up here as soon as it is built, and you can read it
+        right in the browser — no reader needed. There are four ways to get content in:
+      </p>
+
+      <ul class="onboard-routes">
+        <li>
+          <strong>Free books</strong>
+          <span>Browse Standard Ebooks — public-domain classics, properly typeset.</span>
+          <button type="button" class="secondary" data-goto="add" data-focus="books-browse">Find books</button>
+        </li>
+        <li>
+          <strong>News and blogs</strong>
+          <span>Add an RSS feed; each refresh builds one EPUB of the latest articles.</span>
+          <button type="button" class="secondary" data-goto="add" data-focus="feed-url">Add a feed</button>
+        </li>
+        <li>
+          <strong>Your own files</strong>
+          <span>Drop a PDF or a saved web page, or paste article URLs.</span>
+          <button type="button" class="secondary" data-goto="add" data-focus="url-input">Add files or links</button>
+        </li>
+        <li>
+          <strong>Something you write</strong>
+          <span>Type or paste into the editor and build it into a book.</span>
+          <button type="button" class="secondary" data-goto="write" data-focus="draft-title">Start writing</button>
+        </li>
+      </ul>
+
+      <p class="onboard-note">
+        Have an Xteink reader? Converting works offline. <strong>Sending</strong> needs the reader awake with
+        <strong>File Transfer</strong> open on its screen — so the usual order is add
+        everything first, then connect and push the queue in one go.
+      </p>
+    </section>
+
+    <!-- Feed editions are what changes day to day, so they get the wide column;
+         notes and books sit in a sidebar beside them on a large screen and
+         stack underneath on a small one. -->
+    <div class="read-layout">
+      <div class="read-main">
+        <section id="read-feeds-section">
+          <div class="row-between">
+            <h2>Feed editions <span id="read-feeds-count" class="muted"></span></h2>
+            <div class="row-tight">
+              <span class="muted" id="read-feeds-folder"></span>
+              <button id="read-refresh" type="button" class="link">Refresh</button>
+            </div>
+          </div>
+          <ul id="read-feeds" class="list shelf"></ul>
+          <div id="read-feeds-empty" class="muted empty-note">
+            <p>No feed editions yet. Add an RSS feed; each refresh builds one edition of the latest articles.</p>
+            <div class="empty-actions">
+              <button type="button" class="secondary" data-goto="add" data-focus="feed-url">Add a feed</button>
+              <button type="button" class="secondary" data-goto="add" data-click="discover-open">Find interesting feeds</button>
+            </div>
+          </div>
+        </section>
+      </div>
+      <aside class="read-side" aria-label="Notes and books">
+        <section id="read-notes-section">
+          <div class="row-between">
+            <h2>Notes <span id="read-notes-count" class="muted"></span></h2>
+            <span class="muted" id="read-notes-folder"></span>
+          </div>
+          <ul id="read-notes" class="list shelf"></ul>
+          <div id="read-notes-empty" class="muted empty-note">
+            <p>Nothing written yet. Type or paste into the editor and build it into a note.</p>
+            <div class="empty-actions">
+              <button type="button" class="secondary" data-goto="write" data-focus="draft-title">Start writing</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="read-books-section">
+          <div class="row-between">
+            <h2>Books <span id="read-books-count" class="muted"></span></h2>
+          </div>
+          <ul id="read-books" class="list shelf"></ul>
+          <div id="read-books-empty" class="muted empty-note">
+            <p>No books yet. Get a free classic, or drop in a PDF, a saved web page or article links.</p>
+            <div class="empty-actions">
+              <button type="button" class="secondary" data-goto="add" data-focus="books-browse">Find books</button>
+              <button type="button" class="secondary" data-goto="add" data-focus="url-input">Add files or links</button>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <p id="read-sent-key" class="sent-key" hidden>
+      <span><span class="sent-dot sent" aria-hidden="true"></span>Sent to eReader</span>
+      <span><span class="sent-dot" aria-hidden="true"></span>Not sent yet</span>
+    </p>
+
+    <section id="library-section">
+    <div class="row-between">
+    <h2>On the reader <span id="library-folder" class="muted"></span></h2>
+    <div class="row-tight">
+    <label class="field inline">
+    Folder
+    <select id="folder" aria-label="Which reader folder to show"></select>
+    </label>
+    <button id="refresh-library" type="button" class="link">Refresh</button>
+    </div>
+    </div>
+    <ul id="library" class="list"></ul>
+    <div class="actions">
+    <label class="check"><input id="library-all" type="checkbox"> Select all</label>
+    <button id="delete-library" type="button" class="danger" disabled>Delete selected</button>
+    </div>
+    <p id="library-status" class="status"></p>
+    </section>
+  </div>
+
+  <div class="panel" id="tab-add" role="tabpanel" aria-labelledby="tabbtn-add" hidden>
+    <div class="columns">
+      <div class="column">
+        <h2 class="column-title">Add content</h2>
+        <section id="drop" class="drop" tabindex="0">
+        <p class="drop-title">Drop PDF or HTML files here</p>
+        <p class="drop-sub">Course readings (.pdf) and saved web pages (.html) — or <button id="pick" type="button" class="link">choose files</button></p>
+        <input id="file-input" type="file" multiple accept=".pdf,.html,.htm,.xhtml,application/pdf,text/html" hidden>
+        </section>
+        <section class="urls">
+        <label for="url-input">…or paste URLs, one per line</label>
+        <textarea id="url-input" rows="3" placeholder="https://example.com/article"></textarea>
+        <button id="add-urls" type="button" class="secondary">Add URLs</button>
+        </section>
+        <section id="books-section">
+        <div class="row-between">
+        <h2>Find books <span id="books-count" class="muted"></span></h2>
+        <button id="books-browse" type="button" class="secondary">Browse</button>
+        </div>
+
+        <div class="feed-add">
+        <select id="books-source" aria-label="Catalogue"></select>
+        </div>
+        <input id="books-url" type="text" spellcheck="false" hidden
+        placeholder="https://example.com/catalogue.atom" aria-label="Catalogue feed URL">
+
+        <input id="books-filter" type="text" hidden spellcheck="false"
+        placeholder="Filter by title or author" aria-label="Filter books">
+
+        <ul id="books" class="list"></ul>
+
+        <div class="actions" id="books-actions" hidden>
+        <label class="check"><input id="books-all" type="checkbox"> Select all</label>
+        <button id="books-add" type="button" class="primary" disabled>Add to queue</button>
+        </div>
+        <p id="books-status" class="status"></p>
+        </section>
+        <section id="feeds-section">
+        <div class="row-between">
+        <h2>Feeds <span id="feeds-folder" class="muted"></span></h2>
+        <button id="refresh-feeds" type="button" class="secondary">Refresh all</button>
+        </div>
+
+        <div class="feed-add">
+        <input id="feed-url" type="text" placeholder="https://example.com/feed" spellcheck="false"
+        aria-label="Feed URL">
+        <button id="add-feed" type="button" class="secondary">Add feed</button>
+        </div>
+        <button id="discover-open" type="button" class="link discover-open"
+        aria-expanded="false" aria-controls="discover-section">Find interesting feeds</button>
+
+        <!-- Find feeds: a hand-picked list of established publishers, each
+             checked live when opened. -->
+        <div id="discover-section" class="discover" hidden>
+        <div class="row-between">
+        <h3>Find feeds</h3>
+        <div class="row-tight">
+        <button id="discover-recheck" type="button" class="link">Check again</button>
+        <button id="discover-close" type="button" class="link">Close</button>
+        </div>
+        </div>
+        <p class="muted discover-lead">
+        Feeds from established publishers — public broadcasters, nonprofit newsrooms,
+        science publishers and magazines. Each is checked when you open this list, and
+        only the ones working right now are shown.
+        </p>
+        <div id="discover-groups" class="discover-groups" role="group" aria-label="Topic"></div>
+        <ul id="discover-list" class="list"></ul>
+        <p id="discover-status" class="status"></p>
+        </div>
+
+        <ul id="feeds" class="list"></ul>
+        <p id="feeds-status" class="status"></p>
+        </section>
+      </div>
+      <div class="column">
+        <h2 class="column-title">Push to reader</h2>
+        <section id="queue-section" class="hidden">
+        <div class="row-between">
+        <h2>Queue <span id="queue-count" class="muted"></span></h2>
+        <button id="clear-queue" type="button" class="link">Clear</button>
+        </div>
+        <ul id="queue" class="list"></ul>
+        <div class="actions">
+        <label class="check"><input id="include-images" type="checkbox" checked> Include images</label>
+        <label class="check"><input id="image-mode" type="checkbox"> Page images (comic style)</label>
+        <button id="convert" type="button" class="primary">Convert to EPUB</button>
+        </div>
+        <div id="image-options" class="sub-options" hidden>
+        <label class="field">
+        Resolution
+        <select id="image-scale">
+        <option value="1">480 px — smallest files</option>
+        <option value="2" selected>960 px — sharper, zoomable</option>
+        <option value="3">1440 px — largest</option>
+        </select>
+        </label>
+        <label class="field">
+        Split PDF pages
+        <select id="image-split">
+        <option value="whole" selected>Whole page</option>
+        <option value="halves">Into halves — bigger text</option>
+        <option value="thirds">Into thirds — biggest text</option>
+        </select>
+        </label>
+        <label class="field">
+        Text size
+        <select id="image-font">
+        <option value="17">Small</option>
+        <option value="21" selected>Medium</option>
+        <option value="26">Large</option>
+        <option value="32">Extra large</option>
+        </select>
+        </label>
+        <p class="muted sub-note">
+        Each page becomes a picture, so layout is preserved exactly and text
+        cannot reflow or be resized on the reader. Splitting applies to PDFs;
+        text size applies to web pages and drafts. Pages are written as JPEG —
+        the reader needs far less free memory to decode JPEG than PNG, and
+        refuses PNGs mid-render when memory is tight, leaving blank boxes.
+        </p>
+        </div>
+        </section>
+        <section id="results-section">
+        <div class="row-between">
+        <h2>Queued to send <span id="results-count" class="muted"></span></h2>
+        <button id="clear-results" type="button" class="link">Clear</button>
+        </div>
+        <ul id="results" class="list"></ul>
+        <p id="results-empty" class="muted empty-note">
+        Nothing queued. Convert something on the left — dropped files, a URL, a
+        draft or a feed refresh all land here, and stay until they reach the reader.
+        </p>
+        <p id="removal-note" class="muted removal-note" hidden></p>
+        <div class="actions">
+        <label class="field">
+        Send via
+        <select id="destination">
+        <option value="wifi" selected>Wi-Fi</option>
+        </select>
+        </label>
+        <label class="field" id="host-field">
+        Reader address
+        <input id="host" type="text" value="crosspoint.local" spellcheck="false">
+        </label>
+        <button id="send" type="button" class="primary">Send to reader</button>
+        </div>
+        <p id="send-status" class="status"></p>
+        </section>
+      </div>
+    </div>
+
+    <section class="help">
+    <details>
+    <summary>Getting the reader ready</summary>
+    <ol>
+    <li>On the Xteink, open <strong>File Transfer</strong> and join your Wi-Fi.</li>
+    <li>The screen shows an IP address — put it in <strong>Reader address</strong> if <code>crosspoint.local</code> doesn't resolve.</li>
+    <li>Keep the Mac on the same network, then hit <strong>Send to reader</strong>.</li>
+    </ol>
+    <p class="muted"><strong>Hotspot mode instead:</strong> on the reader choose the hotspot option,
+    join <code>CrossPoint-Reader</code> from your Mac's Wi-Fi menu, then click <strong>Hotspot</strong>
+    above (or enter <code>192.168.4.1</code>). Note that your Mac has no internet while joined to the
+    reader, so convert pages and URLs <em>before</em> switching over — sending works fine either way.</p>
+    <p class="muted">The reader only serves uploads while that screen is open. Files land in the app’s own folders — <strong>/A-pub Books</strong>, <strong>/A-pub Notes</strong> and <strong>/A-pub Feeds</strong> — and appear in your library.</p>
+    </details>
+    <details>
+    <summary>No usable network? Copy via the SD card</summary>
+    <p>Some networks (campus, guest and hotel Wi-Fi) stop devices talking to each other,
+    so the reader can be online yet unreachable. Two ways round it, neither needing a network:</p>
+    <ol>
+    <li><strong>Reader's own hotspot</strong> — see above. Works on every model.</li>
+    <li><strong>SD card in a reader</strong> — eject the microSD card from the reader, put it in a
+    card reader, then set <strong>Send via</strong> to that drive. Works on every model.</li>
+    </ol>
+    <p class="muted">Connecting the X4 to a computer by USB does <strong>not</strong> work for file
+    transfer — it is an ESP32-C3 whose USB port is serial/JTAG only. (The USB&nbsp;Drive option exists
+    in the firmware but only on the USB-OTG models: X4&nbsp;Pro, X4C and Paper Mono.) Books land in the
+    same folder however they arrive, so the reader's library looks identical either way.</p>
+    </details>
+    </section>
+
+    <section id="wipe-section" class="wipe-section">
+      <h2>Remove everything</h2>
+      <p class="muted">
+        Starts over. Removes every book, note and feed edition (sent or not), every
+        feed you follow, every draft and its images, and any leftover files. Your
+        settings — the reader's address and image options — are kept.
+      </p>
+      <button id="wipe-open" type="button" class="danger">Remove everything…</button>
+      <p id="wipe-status" class="status"></p>
+    </section>
+  </div>
+
+  <div class="panel" id="tab-write" role="tabpanel" aria-labelledby="tabbtn-write" hidden>
+    <section id="compose-section">
+    <div class="row-between">
+    <h2>Write <span id="draft-state" class="muted"></span></h2>
+    <div class="draft-controls">
+    <select id="draft-picker" aria-label="Open a draft"></select>
+    <button id="new-draft" type="button" class="link">New</button>
+    <button id="delete-draft" type="button" class="link danger-link">Delete</button>
+    </div>
+    </div>
+
+    <div class="editor-wrap">
+    <input id="draft-title" class="draft-title" type="text" placeholder="Title">
+    <input id="draft-author" class="draft-author" type="text" placeholder="Author (optional)">
+
+    <div class="mode-tabs" role="tablist" aria-label="Editing mode">
+    <button type="button" role="tab" class="mode-tab" data-mode="rich" aria-selected="true"
+    title="Rich text — paste from anywhere">Write</button>
+    <button type="button" role="tab" class="mode-tab" data-mode="markdown" aria-selected="false"
+    title="Edit the markdown source">Markdown</button>
+    <button type="button" role="tab" class="mode-tab" data-mode="preview" aria-selected="false"
+    title="See it as the reader will">Preview</button>
+    </div>
+
+    <div class="toolbar" id="rich-toolbar" role="toolbar" aria-label="Formatting">
+    <button type="button" data-cmd="bold" title="Bold (⌘B / Ctrl-B)"><strong>B</strong></button>
+    <button type="button" data-cmd="italic" title="Italic (⌘I / Ctrl-I)"><em>I</em></button>
+    <span class="sep"></span>
+    <button type="button" data-block="h2" title="Heading (⌘⌥2)">H2</button>
+    <button type="button" data-block="h3" title="Subheading (⌘⌥3)">H3</button>
+    <button type="button" data-block="p" title="Body text (⌘⌥0)">¶</button>
+    <span class="sep"></span>
+    <button type="button" data-cmd="insertUnorderedList" title="Bulleted list (⌘⇧8)">•</button>
+    <button type="button" data-cmd="insertOrderedList" title="Numbered list (⌘⇧7)">1.</button>
+    <button type="button" data-block="blockquote" title="Quote">&ldquo;</button>
+    <span class="sep"></span>
+    <button type="button" data-cmd="createLink" title="Add link (⌘K)">Link</button>
+    <button type="button" id="rich-image" title="Insert an image">Image</button>
+    <button type="button" data-cmd="removeFormat" title="Strip formatting (⌘\)">Clear</button>
+    </div>
+
+    <div class="toolbar" id="md-toolbar" role="toolbar" aria-label="Markdown" hidden>
+    <button type="button" data-md="bold" title="Bold"><strong>B</strong></button>
+    <button type="button" data-md="italic" title="Italic"><em>I</em></button>
+    <span class="sep"></span>
+    <button type="button" data-md="h2" title="Heading">##</button>
+    <button type="button" data-md="h3" title="Subheading">###</button>
+    <span class="sep"></span>
+    <button type="button" data-md="ul" title="Bulleted list">•</button>
+    <button type="button" data-md="ol" title="Numbered list">1.</button>
+    <button type="button" data-md="quote" title="Quote">&gt;</button>
+    <span class="sep"></span>
+    <button type="button" data-md="link" title="Link">Link</button>
+    <button type="button" id="md-image" title="Insert an image">Image</button>
+    <button type="button" data-md="hr" title="Section break">―</button>
+    </div>
+
+    <div id="editor" class="editor" contenteditable="true" spellcheck="true"
+    aria-label="Draft body" data-placeholder="Write or paste here. Pasted formatting is cleaned up automatically."></div>
+
+    <textarea id="markdown" class="editor md-source" spellcheck="false" hidden
+    aria-label="Markdown source"
+    placeholder="# Heading&#10;&#10;Write markdown here."></textarea>
+
+    <div id="preview" class="editor preview-pane" hidden aria-label="Preview"></div>
+
+    <!-- Some browsers don't match uncommon types from the wildcard alone, so
+    the formats that go through the sips conversion are named too. -->
+    <input id="image-input" type="file" accept="image/*,.heic,.heif,.tif,.tiff" multiple hidden>
+    </div>
+
+    <div class="actions">
+    <span id="draft-count" class="muted"></span>
+    <button id="save-draft" type="button" class="secondary">Save draft</button>
+    <button id="reveal-drafts" type="button" class="link">Show files</button>
+    <button id="convert-draft" type="button" class="primary">Add</button>
+    </div>
+    <p class="muted sub-note" id="compose-mode-note" hidden>
+    Page images is on, so this draft will be built as fixed-layout pictures.
+    </p>
+    </section>
+    <p class="muted empty-note" id="write-hint">
+      Building a draft puts it in the send queue. Open <strong>Add/Remove</strong> to push it
+      to the reader, or use <strong>⌘↩</strong> here to build. Notes go to their own
+      <strong>/A-pub Notes</strong> folder on the reader.
+    </p>
+  </div>
+
+
+  <dialog id="forget-dialog" class="dialog">
+    <h2>Forget this?</h2>
+    <p id="forget-body" class="muted"></p>
+    <div class="dialog-actions">
+      <button id="forget-cancel" type="button" class="link">Cancel</button>
+      <button id="forget-keep" type="button" class="secondary">Leave on reader</button>
+      <button id="forget-device" type="button" class="danger">Remove from reader too</button>
+    </div>
+  </dialog>
+
+  <dialog id="wipe-dialog" class="dialog">
+    <h2>Remove everything?</h2>
+    <p id="wipe-body" class="muted"></p>
+    <label class="field" for="wipe-phrase">
+      Type <strong>I Agree</strong> to confirm
+      <input id="wipe-phrase" type="text" autocomplete="off" spellcheck="false" placeholder="I Agree">
+    </label>
+    <label class="check">
+      <input id="wipe-device" type="checkbox" checked>
+      Also delete everything this app put on the reader, on the next sync
+    </label>
+    <div class="dialog-actions">
+      <button id="wipe-cancel" type="button" class="link">Cancel</button>
+      <button id="wipe-confirm" type="button" class="danger" disabled>Remove everything</button>
+    </div>
+  </dialog>
+
+  <dialog id="queued-dialog" class="dialog">
+    <h2 id="queued-title">Added to the queue</h2>
+    <p id="queued-body" class="muted"></p>
+    <div class="dialog-actions">
+      <button id="queued-stay" type="button" class="secondary" value="stay">Keep writing</button>
+      <button id="queued-go" type="button" class="primary" value="go">Open Add/Remove</button>
+    </div>
+  </dialog>
+
+  <div id="page-viewer" class="viewer" hidden role="dialog" aria-modal="true" aria-label="Page preview">
+    <div class="viewer-bar">
+      <span id="viewer-title" class="viewer-title"></span>
+      <select id="viewer-chapters" class="viewer-chapters" hidden aria-label="Jump to a chapter"></select>
+      <button id="viewer-type" type="button" class="secondary" hidden
+              aria-expanded="false" aria-controls="viewer-typography"
+              title="Font, size and spacing">Aa</button>
+      <!-- How the book is laid out: as wide as an eBook page or the whole
+           window, and one page at a time or one long scroll. -->
+      <div id="viewer-mode" class="viewer-layout" role="group" aria-label="Page layout" hidden>
+        <div class="seg" role="group" aria-label="Width">
+          <button type="button" class="seg-btn" data-width="ebook" aria-pressed="true"
+                  title="eBook width" aria-label="eBook width"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="8" height="15" rx="1.2"/><path d="M2.5 6v8M17.5 6v8"/></svg></button>
+          <button type="button" class="seg-btn" data-width="full" aria-pressed="false"
+                  title="Full width" aria-label="Full width"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12" rx="1.2"/><path d="M5.5 10h9M7.5 8l-2 2 2 2M12.5 8l2 2-2 2"/></svg></button>
+        </div>
+        <div class="seg" role="group" aria-label="Height">
+          <button type="button" class="seg-btn" data-mode="page" aria-pressed="true"
+                  title="eBook height — one page at a time" aria-label="eBook height, one page at a time"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="2.5" width="11" height="15" rx="1.2"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg></button>
+          <button type="button" class="seg-btn" data-mode="scroll" aria-pressed="false"
+                  title="Scroll — one continuous page" aria-label="Scroll, one continuous page"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 2.5h9v9"/><path d="M5.5 2.5v12"/><path d="M8 6h4M8 9h4"/><path d="M10 12.5v5M7.5 15l2.5 2.5 2.5-2.5"/></svg></button>
+        </div>
+      </div>
+      <span id="viewer-pos" class="muted"></span>
+      <button id="viewer-prev" type="button" class="secondary">‹ Prev</button>
+      <button id="viewer-next" type="button" class="secondary">Next ›</button>
+      <button id="viewer-close" type="button" class="primary">Close</button>
+    </div>
+    <div id="viewer-typography" class="typography" hidden role="group" aria-label="Reading type">
+      <div class="typography-row">
+        <span class="typography-label">Font</span>
+        <select id="type-family" aria-label="Typeface"></select>
+        </div>
+      <div class="typography-row">
+        <span class="typography-label">Size</span>
+        <button id="type-smaller" type="button" class="secondary" aria-label="Smaller text">A−</button>
+        <span id="type-size" class="typography-value" aria-live="polite"></span>
+        <button id="type-bigger" type="button" class="secondary" aria-label="Larger text">A+</button>
+        </div>
+      <div class="typography-row">
+        <span class="typography-label">Spacing</span>
+        <select id="type-leading" aria-label="Line spacing">
+            <option value="1.3">Tight</option>
+            <option value="1.55">Normal</option>
+            <option value="1.8">Loose</option>
+        </select>
+        </div>
+      <div class="typography-row">
+        <span class="typography-label">Text</span>
+        <select id="type-align" aria-label="Text alignment">
+            <option value="left">Ragged right</option>
+            <option value="justify">Justified</option>
+        </select>
+      </div>
+      <p class="typography-note">
+        Affects this preview only. The reader has its own font settings on the device.
+      </p>
+      <button id="type-reset" type="button" class="link">Reset to defaults</button>
+    </div>
+
+    <div class="viewer-stage">
+      <img id="viewer-image" alt="Rendered page" hidden>
+      <!-- Reflowable books preview as text, sized to the reader's panel so
+           line breaks land roughly where they will on the device. -->
+      <article id="viewer-text" class="viewer-text" hidden>
+        <div id="viewer-clip" class="viewer-clip">
+          <div id="viewer-flow" class="viewer-flow"></div>
+        </div>
+      </article>
+    </div>
+  </div>
+
+  
+</main>
+
+<!-- Reader connection status. Kept small and out of the way: most visits are
+     for reading, and the device is often simply switched off. The full message
+     sits behind the info button. -->
+<footer class="status-bar">
+  <div id="device" class="device" data-state="unknown">
+    <span class="dot" aria-hidden="true"></span>
+    <span id="device-label">Checking reader…</span>
+    <button id="device-info" type="button" class="info-button" aria-expanded="false"
+            aria-controls="device-text" aria-label="Reader status details">i</button>
+    <button id="find" type="button" class="link">Find reader</button>
+    <button id="use-hotspot" type="button" class="link" title="Use 192.168.4.1, the address the reader serves on in hotspot mode">Hotspot</button>
+  </div>
+  <p id="device-text" class="device-detail" hidden></p>
+</footer>
+
+<script src="/vendor/marked.js"></script>
+<script src="/vendor/purify.js"></script>
+<script src="/vendor/turndown.js"></script>
+<script src="/app.js"></script>
+<script src="/editor.js"></script>
+<script src="/feeds.js"></script>
+<script src="/books.js"></script>
+<script src="/read.js"></script>
+<script src="/wipe.js"></script>
+<script src="/tabs.js"></script>
+</body>
+</html>

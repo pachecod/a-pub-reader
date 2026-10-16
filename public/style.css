@@ -1,0 +1,1027 @@
+:root {
+  --bg: #14161a;
+  --panel: #1c1f25;
+  --panel-2: #23272f;
+  --line: #31363f;
+  --text: #e7e9ee;
+  --muted: #9aa2b1;
+  --accent: #7cb0ff;
+  --ok: #58c98a;
+  --warn: #e5b567;
+  --bad: #e57373;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --panel-2: #eef0f4;
+    --line: #d8dce3;
+    --text: #1a1d23;
+    --muted: #5f6775;
+    --accent: #1f6feb;
+    --ok: #1f9254;
+    --warn: #a76a06;
+    --bad: #c0392b;
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* Class rules below set `display`, which would otherwise beat the browser's
+   default styling for the `hidden` attribute. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  padding: 0 0 4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+/* Menu bar: logo and name on the left, the sections as menu items beside
+   them, the queue count on the right. */
+.menubar {
+  display: flex;
+  align-items: stretch;
+  gap: 1.75rem;
+  height: 56px;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text);
+  text-decoration: none;
+  flex: none;
+}
+.brand img { display: block; }
+.brand h1 { font-size: 1.05rem; margin: 0; letter-spacing: 0.01em; white-space: nowrap; }
+.menubar-spacer { flex: 1; }
+.menubar .pending-badge { align-self: center; }
+
+h1 { font-size: 1.05rem; margin: 0; letter-spacing: 0.02em; }
+h2 { font-size: 0.95rem; margin: 0; }
+
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* reader status, in a quiet footer at the foot of the page */
+.status-bar {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 0;
+  border-top: 1px solid var(--line);
+}
+.device {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.info-button {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font: italic 600 10px/14px Georgia, serif;
+  cursor: pointer;
+}
+.info-button:hover, .info-button[aria-expanded="true"] { color: var(--text); border-color: var(--muted); }
+.device-detail {
+  margin: 0.4rem 0 0;
+  max-width: 40rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.device .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.device[data-state="ok"] .dot { background: var(--ok); }
+.device[data-state="off"] .dot { background: var(--bad); }
+.device[data-state="busy"] .dot { background: var(--warn); }
+
+/* drop zone */
+.drop {
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: default;
+}
+.drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.drop.over {
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+.drop-title { margin: 0 0 0.35rem; font-size: 1.05rem; font-weight: 600; }
+.drop-sub { margin: 0; color: var(--muted); font-size: 0.88rem; }
+
+/* urls */
+.urls { display: flex; flex-direction: column; gap: 0.5rem; }
+.urls label { font-size: 0.85rem; color: var(--muted); }
+textarea, input[type="text"] {
+  width: 100%;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.9rem;
+}
+textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
+.urls button { align-self: flex-start; }
+
+/* editor */
+.draft-controls { display: flex; align-items: center; gap: 0.6rem; }
+.draft-controls select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+  font: inherit;
+  font-size: 0.82rem;
+  max-width: 15rem;
+}
+.danger-link { color: var(--bad); }
+
+.editor-wrap {
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+.draft-title, .draft-author {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.7rem 0.9rem;
+}
+.draft-title { font-size: 1.1rem; font-weight: 600; }
+.draft-author { font-size: 0.85rem; color: var(--muted); }
+.draft-title:focus, .draft-author:focus { outline: none; border-color: var(--accent); }
+
+.mode-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.mode-tab {
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 0.35rem 0.75rem;
+  position: relative;
+  top: 1px;
+}
+.mode-tab:hover { color: var(--text); }
+.mode-tab.active,
+.mode-tab[aria-selected="true"] {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.md-source {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  resize: vertical;
+  display: block;
+}
+.md-source:focus { outline: none; border-color: transparent; }
+
+.preview-pane { cursor: default; }
+.preview-pane h2, .preview-pane h3 { text-align: left; }
+.preview-pane p { text-align: justify; }
+.preview-pane table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+.preview-pane th, .preview-pane td { border: 1px solid var(--line); padding: 0.25em 0.4em; }
+.preview-pane hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.toolbar button {
+  min-width: 2rem;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.85rem;
+  background: transparent;
+  border-color: transparent;
+}
+.toolbar button:hover { background: var(--panel); border-color: var(--line); }
+.toolbar button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.toolbar .sep { width: 1px; height: 1.1rem; background: var(--line); margin: 0 0.3rem; }
+
+.editor {
+  min-height: 14rem;
+  max-height: 32rem;
+  overflow-y: auto;
+  padding: 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.editor:focus { outline: none; }
+.editor.drag-over { background: var(--panel-2); box-shadow: inset 0 0 0 2px var(--accent); }
+.editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
+.editor h2 { font-size: 1.2rem; margin: 1.1em 0 0.4em; }
+.editor h3 { font-size: 1.05rem; margin: 1em 0 0.35em; }
+.editor h2:first-child, .editor h3:first-child, .editor p:first-child { margin-top: 0; }
+.editor p { margin: 0 0 0.7em; }
+.editor blockquote {
+  margin: 0.7em 0;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+  font-style: italic;
+}
+.editor ul, .editor ol { margin: 0 0 0.7em 1.4rem; padding: 0; }
+.editor a { color: var(--accent); }
+.editor img { max-width: 100%; height: auto; }
+
+/* lists */
+.list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.85rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+.item.bad { border-color: var(--bad); }
+.item input[type="checkbox"] { margin-top: 0.3rem; flex: none; }
+.item-body { flex: 1; min-width: 0; }
+.item-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+.item-meta { color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; overflow-wrap: anywhere; }
+.item-warn { color: var(--warn); font-size: 0.78rem; margin-top: 0.3rem; }
+.item-err { color: var(--bad); font-size: 0.8rem; margin-top: 0.2rem; }
+.item-ok { color: var(--ok); font-size: 0.8rem; margin-top: 0.2rem; }
+.item .remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+}
+.item .remove:hover { color: var(--bad); }
+/* Read tab: sent (green) or not sent yet (red), with a key below the lists. */
+.sent-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bad);
+  margin-right: 0.45rem;
+  vertical-align: 0.08em;
+  flex: none;
+}
+/* Sent: a ticked checkbox, green with a black outline, rather than a dot. */
+.sent-dot.sent {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--ok);
+  border: 1.5px solid #000;
+  vertical-align: -0.05em;
+}
+.sent-dot.sent::after {
+  content: '';
+  position: absolute;
+  left: 2.5px;
+  top: 0;
+  width: 3px;
+  height: 6px;
+  border: solid #fff;
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+}
+.sent-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin: 0.5rem 0 1.5rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  color: var(--muted);
+  margin-right: 0.35rem;
+}
+
+/* actions */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+.actions .primary { margin-left: auto; }
+.field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; color: var(--muted); }
+.field input { width: 11rem; }
+.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--muted); }
+
+button {
+  font: inherit;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 0.5rem 0.9rem;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .primary { color: #10131a; } }
+.secondary { font-size: 0.88rem; }
+.danger {
+  border-color: var(--bad);
+  color: var(--bad);
+  font-weight: 600;
+}
+.danger:hover:not(:disabled) {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+.actions .danger { margin-left: auto; }
+
+.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  font-size: 0.85rem;
+  text-decoration: underline;
+}
+
+/* image-mode options */
+.sub-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.sub-options select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  font: inherit;
+  font-size: 0.85rem;
+  min-width: 12rem;
+}
+.sub-note { flex-basis: 100%; margin: 0; font-size: 0.8rem; line-height: 1.45; }
+
+/* page preview */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(8, 10, 14, 0.9);
+  display: flex;
+  flex-direction: column;
+}
+.viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.viewer-title { font-weight: 600; font-size: 0.9rem; margin-right: auto; }
+/* A phone cannot fit the whole bar on one line: let it wrap, with the title
+   and chapter picker on their own rows and the controls below. */
+@media (max-width: 720px) {
+  .viewer-bar { flex-wrap: wrap; row-gap: 0.45rem; padding: 0.55rem 0.75rem; }
+  .viewer-title { flex: 1 1 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .viewer-chapters { flex: 1 1 100%; min-width: 0; }
+  .viewer-bar .secondary, .viewer-bar .primary { padding: 0.4rem 0.6rem; }
+}
+.viewer-stage {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.2rem;
+}
+/* White frame: the page images are white, so they need an edge against the
+   dark backdrop to read as pages. */
+.viewer-stage img {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line), 0 10px 40px rgba(0, 0, 0, 0.5);
+  max-width: 100%;
+  height: auto;
+}
+
+.row-between { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.muted { color: var(--muted); font-weight: 400; font-size: 0.82rem; }
+.status { font-size: 0.85rem; color: var(--muted); margin: 0.75rem 0 0; min-height: 1.2em; }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--bad); }
+.hidden { display: none; }
+
+.help { font-size: 0.87rem; }
+.help summary { cursor: pointer; color: var(--muted); }
+.help ol { margin: 0.6rem 0; padding-left: 1.3rem; }
+.help li { margin-bottom: 0.3rem; }
+.help code {
+  background: var(--panel-2);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+a { color: var(--accent); }
+
+.spin {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: -0.1em;
+  margin-right: 0.4em;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* feeds */
+.feed-add { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+.feed-add input { flex: 1; }
+
+/* "Refreshing Feeds", under the tabs while a refresh runs. */
+.refresh-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  align-self: flex-start;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* Find feeds */
+.discover-open { display: block; margin-top: 0.6rem; font-size: 0.85rem; }
+.discover {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.discover h3 { font-size: 0.92rem; margin: 0; }
+.discover-lead { margin: 0.35rem 0 0.75rem; }
+.discover-groups { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.discover-groups button {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+}
+.discover-groups button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.discover .list { max-height: 28rem; overflow-y: auto; }
+.discover-latest { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; font-style: italic; }
+.discover .item-actions-col { display: flex; align-items: center; }
+.discover .following { font-size: 0.78rem; color: var(--ok); white-space: nowrap; }
+.feed-item-actions { display: flex; align-items: center; gap: 0.6rem; flex: none; }
+.feed-steps { color: var(--muted); font-size: 0.78rem; margin-top: 0.3rem; line-height: 1.5; }
+.feed-opts { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.35rem; font-size: 0.78rem; color: var(--muted); }
+.feed-opts input[type="number"] {
+  width: 4rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.15rem 0.3rem;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+/* two-column layout: producing EPUBs on the left, moving them on the right */
+.columns {
+  display: grid;
+  /* The push column is the narrower job, but both need room for file lists. */
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 1.75rem;
+  align-items: start;
+}
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.column-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 0 0 -0.35rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The push column is empty until something is converted; a placeholder is
+   better than a blank half-page. */
+#results-section.hidden + #library-section { margin-top: 0; }
+
+@media (max-width: 900px) {
+  .columns { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  .column-title { margin-top: 0.5rem; }
+}
+
+.empty-note {
+  margin: 0.75rem 0 0;
+  padding: 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.empty-note p { margin: 0; }
+.empty-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.65rem; }
+.item.delivered { opacity: 0.72; }
+.badge-feed { border-color: var(--accent); color: var(--accent); }
+
+/* text preview: shaped like the reader's page so the preview is informative */
+.viewer-chapters {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+  font: inherit;
+  font-size: 0.82rem;
+  max-width: 22rem;
+}
+.viewer-text {
+  background: #fff;
+  color: #111;
+  width: 100%;
+  max-width: 34rem;
+  padding: 2.2rem 2.4rem 3rem;
+  box-shadow: 0 0 0 1px var(--line), 0 10px 40px rgba(0, 0, 0, 0.5);
+  /* Set from the reading controls; the values here are the defaults. */
+  font-family: var(--reader-font, Georgia, "Times New Roman", Times, serif);
+  font-size: var(--reader-size, 17px);
+  line-height: var(--reader-leading, 1.55);
+  text-align: var(--reader-align, justify);
+  hyphens: auto;
+}
+.viewer-text h1 { font-size: 1.5em; line-height: 1.2; text-align: left; margin: 0 0 0.6em; }
+.viewer-text h2 { font-size: 1.25em; line-height: 1.25; text-align: left; margin: 1.2em 0 0.5em; }
+.viewer-text h3 { font-size: 1.1em; text-align: left; margin: 1em 0 0.4em; }
+.viewer-text p { margin: 0 0 0.7em; }
+.viewer-text blockquote {
+  margin: 0.8em 1.2em;
+  font-style: italic;
+  color: #333;
+}
+.viewer-text img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
+.viewer-text figcaption, .viewer-text .cp-meta { font-size: 0.85em; color: #444; text-align: center; }
+.viewer-text .cp-meta { text-align: left; }
+.viewer-text table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+.viewer-text th, .viewer-text td { border: 1px solid #999; padding: 0.25em 0.4em; text-align: left; }
+.viewer-text hr { border: 0; border-top: 1px solid #999; margin: 1.2em 0; }
+.viewer-text ul, .viewer-text ol { margin: 0 0 0.7em 1.3em; padding: 0; }
+.viewer-text a { color: #1a4f9c; }
+.viewer-text pre { white-space: pre-wrap; font-size: 0.85em; }
+.viewer-note { color: var(--muted); font-size: 0.85rem; padding: 1rem; }
+
+/* find books */
+#books-source { flex: 1; }
+.book-summary {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.3rem;
+  line-height: 1.45;
+  /* Blurbs vary wildly in length; cap them so the list stays scannable. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.book-queued { color: var(--ok); font-size: 0.78rem; margin-top: 0.25rem; }
+#books { max-height: 30rem; overflow-y: auto; }
+
+/* tabs, as the menu bar's items: an underline marks the current one */
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+.tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 500;
+  padding: 0 0.85rem;
+  margin-bottom: -1px;
+}
+.tab:hover:not(:disabled) { color: var(--text); border-color: var(--line); }
+.tab.active,
+.tab[aria-selected="true"],
+.tab[aria-selected="true"]:hover {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+
+/* Narrow screens: the name gives way to the logo, the items close up. */
+@media (max-width: 640px) {
+  .menubar { gap: 0.75rem; padding: 0 0.75rem; }
+  .brand h1 { display: none; }
+  .tab { padding: 0 0.55rem; font-size: 0.88rem; }
+  .menubar .pending-badge { font-size: 0.72rem; padding: 0.2rem 0.5rem; }
+}
+
+.pending-badge {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+}
+.pending-badge:hover { background: var(--accent); color: #fff; }
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+/* A panel is the tab's content; the columns layout only applies inside Add. */
+.panel .columns { margin-top: 0; }
+
+#read-books-section .list,
+#read-notes-section .list,
+#read-feeds-section .list { max-height: none; }
+
+/* Read tab: feed editions in the wide column, notes and books in a sidebar on
+   a large screen; everything stacks (feeds, notes, books) below that. */
+.read-layout { display: flex; flex-direction: column; gap: 1.5rem; }
+.read-main, .read-side { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
+@media (min-width: 1000px) {
+  .read-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    gap: 20px;
+    align-items: start;
+  }
+  /* The sidebar is one card wide. */
+  .read-side .shelf { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Read tab, first run */
+#read-onboarding {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 1.6rem 1.5rem;
+}
+.onboard-title { font-size: 1.15rem; margin: 0 0 0.4rem; }
+.onboard-lead { color: var(--muted); font-size: 0.9rem; margin: 0 0 1.2rem; max-width: 52ch; line-height: 1.55; }
+
+.onboard-routes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.onboard-routes li {
+  display: grid;
+  /* Label, explanation, action — the action column stays aligned down the list. */
+  grid-template-columns: 10rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.onboard-routes strong { font-size: 0.9rem; }
+.onboard-routes span { color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+
+.onboard-note {
+  margin: 1.3rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.83rem;
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+@media (max-width: 700px) {
+  .onboard-routes li { grid-template-columns: minmax(0, 1fr); gap: 0.35rem; }
+  .onboard-routes button { justify-self: start; }
+}
+
+/* Paged reading: a portrait page, one column at a time.
+   The flow is laid out in CSS columns exactly one page wide, and the clip shows
+   a single column — moving a page is a horizontal translate rather than a
+   re-layout, so it stays instant on a long chapter. */
+.viewer-clip { overflow: hidden; }
+.viewer-flow { column-gap: 0; }
+
+.viewer-text.page-mode {
+  /* Width and height are set from script, sized to the stage. Padding is in
+     whole pixels so the content box is an integer width, which keeps the
+     column pitch and the page step exactly equal. */
+  padding: 38px 36px;
+  overflow: hidden;
+  flex: none;
+}
+.viewer-text.page-mode .viewer-clip { width: 100%; height: 100%; }
+.viewer-text.page-mode .viewer-flow {
+  transition: transform 0.12s ease-out;
+  will-change: transform;
+}
+/* Under a turning page the new one is already in place, not sliding to it. */
+.viewer-text.page-mode .viewer-flow.turning { transition: none; }
+
+/* The snapshot of the page being turned; see turnPage() in app.js. */
+.page-leaf {
+  position: absolute;
+  margin: 0;
+  z-index: 2;
+  pointer-events: none;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+/* Turning back, the old page waits underneath the one swinging in. */
+.page-leaf.page-leaf-under { z-index: 0; }
+.page-arriving { position: relative; z-index: 1; }
+
+/* Nothing may exceed the page, or it would spill into the next column. */
+.viewer-text.page-mode .viewer-flow img { max-height: 88%; object-fit: contain; }
+.viewer-text.page-mode .viewer-flow h1 { break-after: avoid-column; }
+.viewer-text.page-mode .viewer-flow h2,
+.viewer-text.page-mode .viewer-flow h3 { break-after: avoid-column; break-inside: avoid-column; }
+
+.viewer-text.scroll-mode {
+  width: 100%;
+  max-width: 34rem;
+  padding: 2.2rem 2.4rem 3rem;
+}
+.viewer-text.scroll-mode .viewer-clip { overflow: visible; }
+/* Full width: the text runs the width of the window instead of a page. */
+.viewer-text.full-width { max-width: none; }
+/* Scroll view: the chapters run on in one column, with a rule between them. */
+.viewer-text .chapter-break { border: 0; border-top: 1px solid #ccc; margin: 2.5em 0; }
+
+/* Layout toggles in the viewer bar: two pairs of icon buttons, the current
+   choice in each pair filled in. */
+.viewer-layout { display: flex; gap: 0.4rem; }
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg-btn {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  padding: 0.35rem 0.5rem;
+  background: transparent;
+  color: var(--muted);
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+.seg-btn:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
+.seg-btn[aria-pressed="true"],
+.seg-btn[aria-pressed="true"]:hover { background: var(--accent); color: #fff; }
+.seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.viewer-page-count { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+/* The Read tab's shelves tile when there is room for it.
+   These are self-contained cards of about equal size, unlike the queue and
+   library rows, so on a wide window a single column is mostly empty space and
+   a lot of needless scrolling. auto-fill does this without a breakpoint: one
+   column when narrow, more as the window grows. */
+.shelf {
+  display: grid;
+  /* auto-fit, not auto-fill: with fewer cards than fit in a row, the cards
+     widen to fill it instead of leaving empty columns beside them. */
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  align-items: start;
+  gap: 0.6rem 20px;
+}
+/* Cards in a row should line up top and bottom whatever their text runs to. */
+.shelf .item { height: 100%; }
+.shelf .item-body { display: flex; flex-direction: column; }
+/* Push the actions to the bottom so Read/Download/Forget line up across a row. */
+.shelf .item-body > div:last-child { margin-top: auto; }
+
+/* Confirmation after queueing a draft. A native dialog gets modal behaviour,
+   Escape and focus handling without reimplementing any of it. */
+.dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  padding: 1.2rem 1.3rem;
+  max-width: 26rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.dialog::backdrop { background: rgba(8, 10, 14, 0.6); }
+.dialog h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.dialog p { margin: 0; line-height: 1.5; }
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+/* A heading's controls, kept together at its right-hand end. */
+.row-tight { display: flex; align-items: center; gap: 0.7rem; }
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.field.inline select { font-size: 0.82rem; padding: 0.2rem 0.4rem; }
+
+/* Reading controls: font, size, spacing — the settings an e-reader offers.
+   A panel anchored under its button in the viewer bar, so the page underneath
+   stays visible and you can judge a change as you make it. */
+.typography {
+  position: absolute;
+  top: 3.1rem;
+  right: 1rem;
+  z-index: 60;
+  width: 15.5rem;
+  padding: 0.9rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.typography-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+.typography-label {
+  flex: none;
+  width: 4.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.typography-row select {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.25rem 0.35rem;
+  font: inherit;
+  font-size: 0.8rem;
+}
+.typography-row .secondary { padding: 0.2rem 0.5rem; font-size: 0.82rem; }
+.typography-value {
+  flex: 1;
+  text-align: center;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.typography-note {
+  margin: 0.7rem 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* Remove-everything. Set apart from the lists it acts on, and quiet until
+   used — it should be findable without inviting a stray click. */
+#wipe-section {
+  margin-top: 2rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+#wipe-section h2 { font-size: 0.95rem; }
+#wipe-section p.muted { max-width: 44rem; font-size: 0.82rem; line-height: 1.5; }
+
+.dialog .field { margin: 1rem 0 0.6rem; font-size: 0.82rem; }
+.dialog .field input[type="text"] {
+  margin-top: 0.3rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+}
+.dialog .check { display: flex; gap: 0.45rem; align-items: flex-start; font-size: 0.8rem; color: var(--muted); }
+
+/* Pending device deletions. Warning-coloured because it describes something
+   that will be destroyed, and it sits directly above the button that does it. */
+.removal-note {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  color: var(--warn);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}

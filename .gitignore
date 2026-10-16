@@ -1,0 +1,13 @@
+node_modules/
+out/
+drafts/
+config.json
+.DS_Store
+assets/
+epub-drop.log
+.epub-drop.pid
+feeds.json
+
+# Local test documents, kept out of the repository.
+examples/
+*.tmp
