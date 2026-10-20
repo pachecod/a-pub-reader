@@ -416,8 +416,12 @@
   // Clicking Library fetches the latest editions, whenever it was last done.
   // A refresh already running is left to finish rather than started twice.
   window.epubDropFeeds = {
+    // Says whether a refresh started, so a caller with nothing to refresh can
+    // fall back to just reloading its list.
     refreshAll: () => {
-      if (feeds.length && !working) refreshFeeds();
+      if (!feeds.length || working) return false;
+      refreshFeeds();
+      return true;
     },
   };
 

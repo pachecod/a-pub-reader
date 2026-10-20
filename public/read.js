@@ -250,7 +250,13 @@
   el.forgetKeep.addEventListener('click', () => doForget(false));
   el.forgetDevice.addEventListener('click', () => doForget(true));
 
-  el.refresh.addEventListener('click', load);
+  // Refresh fetches the latest feed editions, the same as clicking Library;
+  // the list reloads itself when that finishes. With no feeds to fetch (or a
+  // refresh already running) it just reloads the list.
+  el.refresh.title = 'Fetch the latest editions of every feed';
+  el.refresh.addEventListener('click', () => {
+    if (!window.epubDropFeeds?.refreshAll()) load();
+  });
   window.epubDropRead = { load };
   load();
 })();
