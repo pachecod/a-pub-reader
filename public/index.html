@@ -288,13 +288,9 @@
         <h2>Queued to send <span id="results-count" class="muted"></span></h2>
         <button id="clear-results" type="button" class="link">Clear</button>
         </div>
-        <ul id="results" class="list"></ul>
-        <p id="results-empty" class="muted empty-note">
-        Nothing queued. Convert something on the left — dropped files, a URL, a
-        draft or a feed refresh all land here, and stay until they reach the reader.
-        </p>
-        <p id="removal-note" class="muted removal-note" hidden></p>
-        <div class="actions">
+        <!-- Where and how to sync sit above the list, so they are in reach
+             however long it gets; a second Sync Reader closes the list. -->
+        <div class="actions sync-controls">
         <label class="field">
         Send via
         <select id="destination">
@@ -308,6 +304,15 @@
         <button id="send" type="button" class="primary">Sync Reader</button>
         </div>
         <p id="send-status" class="status"></p>
+        <p id="removal-note" class="muted removal-note" hidden></p>
+        <ul id="results" class="list"></ul>
+        <p id="results-empty" class="muted empty-note">
+        Nothing queued. Convert something on the left — dropped files, a URL, a
+        draft or a feed refresh all land here, and stay until they reach the reader.
+        </p>
+        <div class="actions sync-bottom">
+        <button id="send-bottom" type="button" class="primary">Sync Reader</button>
+        </div>
         </section>
       </div>
     </div>

@@ -655,6 +655,11 @@ a { color: var(--accent); }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; text-align: center; }
 
+/* Add/Remove: the sync controls open the queue, and Sync Reader closes it. */
+.sync-controls { margin-top: 0.6rem; }
+.sync-bottom { justify-content: flex-end; }
+.sync-bottom[hidden] { display: none; }
+
 /* Sync Reader at the top of the Library, with its result beside it. */
 .sync-bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.9rem; }
 .sync-bar .status { margin: 0; text-align: right; }

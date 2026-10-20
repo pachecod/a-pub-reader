@@ -28,6 +28,7 @@ const el = {
   sendStatus: $('send-status'),
   // The Library's own Sync Reader button and status line.
   syncLibrary: $('read-sync'),
+  sendBottom: $('send-bottom'),
   syncLibraryStatus: $('read-sync-status'),
   device: $('device'),
   deviceText: $('device-text'),
@@ -328,6 +329,8 @@ function renderResults(failures = []) {
   const shown = shownResults();
   el.resultsCount.textContent = shown.length ? `· ${shown.length}` : '';
   if (el.resultsEmpty) el.resultsEmpty.hidden = shown.length > 0 || failures.length > 0;
+  // The closing Sync Reader is only worth having under an actual list.
+  if (el.sendBottom) el.sendBottom.parentElement.hidden = shown.length === 0;
   updateSyncButtons();
 
   const nodes = [];
@@ -472,7 +475,7 @@ const syncLabel = () => (el.destination.value !== 'wifi' ? 'Sync drive' : 'Sync 
 
 function updateSyncButtons() {
   const idle = !toSync().length && !pendingRemovals.length;
-  for (const button of [el.send, el.syncLibrary]) {
+  for (const button of [el.send, el.sendBottom, el.syncLibrary]) {
     if (button) button.disabled = busy || idle;
   }
 }
@@ -1351,7 +1354,7 @@ function syncDestination() {
   el.hostField.hidden = viaVolume;
   el.find.hidden = viaVolume;
   el.useHotspot.hidden = viaVolume;
-  for (const button of [el.send, el.syncLibrary]) if (button) button.textContent = syncLabel();
+  for (const button of [el.send, el.sendBottom, el.syncLibrary]) if (button) button.textContent = syncLabel();
 
   if (viaVolume) {
     const volume = volumes.find((v) => v.path === el.destination.value);
@@ -1739,6 +1742,11 @@ el.clearResults.addEventListener('click', async () => {
 el.convert.addEventListener('click', convert);
 el.send.addEventListener('click', () => send(el.send));
 el.syncLibrary?.addEventListener('click', () => send(el.syncLibrary));
+el.sendBottom?.addEventListener('click', () => {
+  send(el.sendBottom);
+  // The result is reported with the controls at the top of the list.
+  el.sendStatus.scrollIntoView({ block: 'center', behavior: 'smooth' });
+});
 el.find.addEventListener('click', findDevice);
 el.useHotspot.addEventListener('click', async () => {
   el.host.value = '192.168.4.1';
