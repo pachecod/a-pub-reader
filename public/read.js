@@ -35,6 +35,8 @@
     forgetDevice: $('forget-device'),
     booksSection: $('read-books-section'),
     feedsSection: $('read-feeds-section'),
+    feedsMore: $('read-feeds-more'),
+    booksMore: $('read-books-more'),
     sentKey: $('read-sent-key'),
   };
 
@@ -179,6 +181,9 @@
       el.feedsCount.textContent = feeds.length ? `· ${feeds.length}` : '';
       el.booksEmpty.hidden = books.length > 0;
       el.feedsEmpty.hidden = feeds.length > 0;
+      // An empty section has its own buttons; a filled one gets a link below it.
+      el.booksMore.hidden = books.length === 0;
+      el.feedsMore.hidden = feeds.length === 0;
       el.feedsFolder.textContent = feeds.length ? feeds[0].folder || '' : '';
       el.notesCount.textContent = notes.length ? `· ${notes.length}` : '';
       el.notesEmpty.hidden = notes.length > 0;
