@@ -1459,11 +1459,13 @@ async function handle(req, res) {
       res.writeHead(200, {
         'content-type': MIME['.html'],
         'cache-control': 'no-store',
-        // Chapters are HTML from wherever the item came from. They are served as
-        // a page of their own, so forbid scripts outright rather than trusting
-        // that conversion stripped every one.
+        // Chapters are HTML from wherever the item came from, served as a page
+        // of their own. The only script allowed is the app's own file for the
+        // On reader switch: nothing inline (so no handler attributes) and
+        // nothing from the book or another site, rather than trusting that
+        // conversion stripped every script.
         'content-security-policy':
-          "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'none'; frame-src 'none'; object-src 'none'",
+          "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
       });
       return res.end(html);
     } catch (err) {

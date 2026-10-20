@@ -256,10 +256,12 @@ try {
   assert(/id="ch-1"/.test(webHtml) && /id="ch-2"/.test(webHtml), 'every chapter is on the one page');
   assert(/href="#ch-2"/.test(webHtml), 'a contents list links to each chapter');
   assert(webHtml.includes(`/?epub=${ok.id}`), 'it links to the ePub view');
+  const policy = web.headers.get('content-security-policy') || '';
   assert(
-    /script-src 'none'/.test(web.headers.get('content-security-policy') || ''),
-    'scripts are forbidden on the reading page'
+    /script-src 'self'(;|$)/.test(policy) && !/unsafe-inline|unsafe-eval/.test(policy.split('script-src')[1].split(';')[0]),
+    "only the app's own script may run on the reading page, never inline or the book's"
   );
+  assert(/role="switch"/.test(webHtml) && /id="reader-state"/.test(webHtml), 'the reading page has the On reader switch and its note');
   const missing = await fetch(`http://127.0.0.1:${APP_PORT}/read/00000000-0000-0000-0000-000000000000`);
   assert(missing.status === 404, 'an unknown item is a 404');
 

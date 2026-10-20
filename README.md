@@ -334,8 +334,13 @@ back out of the EPUB. Fixed-layout books show their page images in a column.
 From there, **Read as eBook** opens the device-shaped previewer described
 below (via `/?epub=<id>`).
 
-The page is built from the EPUB's own chapters, so it is served with a
-Content-Security-Policy that forbids scripts outright.
+Each reading page also carries the item's **On reader** switch, next to Read
+as eBook, with the note under the title saying where it stands.
+
+The page is built from the EPUB's own chapters, which conversion strips of
+scripts. It is also served with a Content-Security-Policy that allows only the
+app's own `web-read.js` (for the switch): no inline script, nothing from the
+book or another site, and no forms or `<base>` redirects.
 
 ## Previewing
 

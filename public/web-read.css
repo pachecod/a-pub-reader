@@ -10,6 +10,8 @@
   --line-strong: #c4bfb5;
   --button-top: #ffffff;
   --button-bottom: #f4f2ee;
+  --ok: #1f9254;
+  --panel-2: #efece6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +25,8 @@
     --line-strong: #444b57;
     --button-top: #2a2f38;
     --button-bottom: #22262e;
+    --ok: #58c98a;
+    --panel-2: #23272f;
   }
 }
 
@@ -90,6 +94,40 @@ a { color: var(--accent); }
 .bar-button:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 2px 6px rgba(16, 24, 40, 0.12); }
 .bar-button:active { transform: translateY(1px); box-shadow: inset 0 1px 3px rgba(16, 24, 40, 0.2); }
 
+/* The On reader switch, as on the Library cards. */
+.reader-switch { display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0.35rem; }
+.switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel-2);
+  box-shadow: inset 0 1px 2px rgba(16, 24, 40, 0.15);
+  cursor: pointer;
+  flex: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.3);
+  transition: transform 0.15s;
+}
+.switch[aria-checked="true"] { background: var(--ok); border-color: var(--ok); }
+.switch[aria-checked="true"] .switch-knob { transform: translateX(14px); }
+.switch:hover:not(:disabled) { border-color: var(--accent); }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch:disabled { opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch-knob { transition: none; } }
+.switch-label { color: var(--text); font-weight: 500; white-space: nowrap; }
+
 /* Narrow screens: the name gives way to the logo, and everything closes up. */
 @media (max-width: 640px) {
   .bar { gap: 0.6rem; padding: 0 0.75rem; }
@@ -99,6 +137,14 @@ a { color: var(--accent); }
   /* Icons only; the labels stay available to screen readers. */
   .bar-button { padding: 0.4rem 0.5rem; }
   .bar-button span { display: none; }
+  .switch-label { display: none; }
+  .reader-switch { margin-right: 0.1rem; }
+}
+/* A phone: the Library item already leads home, so the logo gives way too. */
+@media (max-width: 480px) {
+  .brand { display: none; }
+  .bar { gap: 0.4rem; padding: 0 0.5rem; }
+  .menu a { padding: 0 0.4rem; }
 }
 
 .page {
