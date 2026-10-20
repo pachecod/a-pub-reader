@@ -66,7 +66,10 @@
 
   nav.addEventListener('click', (event) => {
     const tab = event.target.closest('.tab');
-    if (tab) show(tab.dataset.tab);
+    if (!tab) return;
+    show(tab.dataset.tab);
+    // Clicking Read, even when already on it, brings in the latest feeds.
+    if (tab.dataset.tab === 'read') window.epubDropFeeds?.refreshAll();
   });
 
   // Left/right arrows move between tabs when one has focus.

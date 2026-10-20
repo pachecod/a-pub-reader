@@ -268,7 +268,8 @@ instead of scattering subheadings through the table of contents.
 ### Automatic refresh
 
 Loading the main page refreshes every feed, with a **Refreshing Feeds** message
-under the tabs while it runs. If every feed was refreshed in the last ten
+under the tabs while it runs. Clicking **Read** in the menu bar — even when
+already on it — refreshes them again, whenever they were last refreshed. If every feed was refreshed in the last ten
 minutes it is skipped, so coming back from a reading page does not fetch them
 all again. A second request while a refresh-all is running (a reload, another
 tab) waits for that run rather than starting its own, so nothing is built twice.
