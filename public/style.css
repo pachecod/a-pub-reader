@@ -651,6 +651,8 @@ a { color: var(--accent); }
 }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; text-align: center; }
+/* Controls the Library's links scroll to stay clear of the sticky menu bar. */
+#discover-open, #books-browse, #new-draft { scroll-margin-top: 84px; }
 
 /* Library tab cards: the title links to the reading page. */
 .card-title-link { color: var(--accent); text-decoration: none; }

@@ -37,6 +37,7 @@
     feedsSection: $('read-feeds-section'),
     feedsMore: $('read-feeds-more'),
     booksMore: $('read-books-more'),
+    notesMore: $('read-notes-more'),
     sentKey: $('read-sent-key'),
   };
 
@@ -172,6 +173,7 @@
       // An empty section has its own buttons; a filled one gets a link below it.
       el.booksMore.hidden = books.length === 0;
       el.feedsMore.hidden = feeds.length === 0;
+      el.notesMore.hidden = notes.length === 0;
       el.feedsFolder.textContent = feeds.length ? feeds[0].folder || '' : '';
       el.notesCount.textContent = notes.length ? `· ${notes.length}` : '';
       el.notesEmpty.hidden = notes.length > 0;
