@@ -652,8 +652,13 @@ a { color: var(--accent); }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; }
 
+/* Read tab cards: the title links to the reading page. */
+.card-title-link { color: var(--accent); text-decoration: none; }
+.card-title-link:hover { text-decoration: underline; }
+
 /* Read tab cards: Forget is a small × in the top right corner. */
-.shelf .item { position: relative; padding-right: 2.2rem; }
+.shelf .item { position: relative; }
+.shelf .item .item-title { padding-right: 1.6rem; }
 .card-forget {
   position: absolute;
   top: 0.35rem;

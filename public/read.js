@@ -83,7 +83,13 @@
     dot.title = state;
     dot.setAttribute('role', 'img');
     dot.setAttribute('aria-label', state);
-    title.append(dot, entry.author ? `${entry.title} — ${entry.author}` : entry.title);
+    // The title is the way in: it opens the reading page, which links on to
+    // the device-shaped eBook view and the download.
+    const link = document.createElement('a');
+    link.href = `/read/${entry.id}`;
+    link.className = 'card-title-link';
+    link.textContent = entry.author ? `${entry.title} — ${entry.author}` : entry.title;
+    title.append(dot, link);
     body.appendChild(title);
 
     const meta = document.createElement('div');
@@ -103,21 +109,6 @@
     meta.append(bits.filter(Boolean).join(' · '));
     body.appendChild(meta);
 
-    const actions = document.createElement('div');
-    actions.style.marginTop = '0.3rem';
-    actions.style.display = 'flex';
-    actions.style.gap = '0.75rem';
-
-    // Reading is a plain web page; that page links on to the device-shaped
-    // eBook view for anyone who wants to see how it will look on a reader.
-    const read = document.createElement('a');
-    read.href = `/read/${entry.id}`;
-    read.textContent = entry.mode === 'images' ? 'Read pages' : 'Read';
-    read.style.fontSize = '0.8rem';
-    read.style.fontWeight = '600';
-    actions.appendChild(read);
-
-    body.appendChild(actions);
     li.appendChild(body);
 
     // Downloading lives on the reading page; the card itself only reads or
