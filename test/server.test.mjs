@@ -513,6 +513,46 @@ try {
   await api('/api/send', { method: 'POST', body: JSON.stringify({ ids: [switched.id], host: DEVICE_HOST }) });
   assert(onDevice() && Boolean((await record()).deliveredAt), 'and the next sync puts it back');
 
+  // A feed switches as a whole: the edition on the reader and the newer one
+  // waiting to replace it. Two editions are written straight into the queue,
+  // since a live feed cannot be fetched here.
+  const outboxFile = path.join(sandbox, 'out', 'outbox.json');
+  const stored = JSON.parse(await fs.readFile(outboxFile, 'utf8'));
+  const base = stored.items.find((i) => i.id === switched.id);
+  const feedSource = { kind: 'feed', label: 'Test Feed', feedId: 'feed-under-test' };
+  // Each edition needs a file of its own: forgetting one deletes its file.
+  const copyOf = async (name) => {
+    const target = path.join(sandbox, 'out', name);
+    await fs.copyFile(base.diskPath, target);
+    return target;
+  };
+  stored.items.push(
+    { ...base, id: '11111111-1111-1111-1111-111111111111', diskPath: await copyOf('feed-old.epub'), filename: 'Test Feed - old.epub', folder: '/A-pub Feeds', source: feedSource, onReader: true, deliveredAt: new Date().toISOString(), builtAt: '2026-01-01T00:00:00.000Z' },
+    { ...base, id: '22222222-2222-2222-2222-222222222222', diskPath: await copyOf('feed-new.epub'), filename: 'Test Feed - new.epub', folder: '/A-pub Feeds', source: feedSource, onReader: true, deliveredAt: null, builtAt: '2026-01-02T00:00:00.000Z' }
+  );
+  await fs.writeFile(outboxFile, JSON.stringify(stored));
+  const feedOff = await api('/api/outbox/on-reader', {
+    method: 'POST',
+    body: JSON.stringify({ id: '22222222-2222-2222-2222-222222222222', on: false }),
+  });
+  const editions = (await api('/api/outbox')).body.items.filter((i) => i.source?.feedId === 'feed-under-test');
+  assert(editions.length === 2 && editions.every((i) => i.onReader === false), 'switching a feed off switches off every edition');
+  assert(
+    (await api('/api/removals')).body.removals.some((r) => r.filename === 'Test Feed - old.epub'),
+    'and the edition already on the reader is queued to come off'
+  );
+  await api('/api/outbox/on-reader', {
+    method: 'POST',
+    body: JSON.stringify({ id: '22222222-2222-2222-2222-222222222222', on: true }),
+  });
+  assert(
+    !(await api('/api/removals')).body.removals.some((r) => r.filename === 'Test Feed - old.epub'),
+    'switching the feed back on cancels that removal'
+  );
+  for (const id of ['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222']) {
+    await api('/api/outbox/remove', { method: 'POST', body: JSON.stringify({ id, fromDevice: false }) });
+  }
+
   const unknownSwitch = await api('/api/outbox/on-reader', { method: 'POST', body: JSON.stringify({ id: 'nope', on: true }) });
   assert(unknownSwitch.status === 404, 'switching an unknown item is a 404');
 

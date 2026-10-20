@@ -41,7 +41,7 @@ paste and uploading to your reader on the local network.
 
 ## The loop
 
-**Drop or write → Convert → Preview → Send to reader**, with the reader's
+**Drop or write → Convert → Preview → Sync Reader**, with the reader's
 `/A-pub Books` folder visible and manageable from the same page.
 
 | Step | What happens |
@@ -400,7 +400,9 @@ closes. Fixed-layout books ignore all of this and page through their images.
 
 ## Managing what's on the reader
 
-Each card in the **Library** has an **On reader** switch:
+Each item has one **On reader** switch — on its Library card and, mirrored,
+in the **Queued to send** list on Add/Remove — and **Sync Reader** (at the top
+of the Library, and on Add/Remove) makes the reader match the switches:
 
 - **On** (the default): the item goes to the reader at the next sync, or stays
   there if it already is.
@@ -408,8 +410,11 @@ Each card in the **Library** has an **On reader** switch:
   next sync. The app keeps its copy, so it can still be read in the browser,
   and switching it back on sends it again.
 
-A note on the card says when the next sync will change something. A feed
-switched off stays off: each new edition inherits the switch. A sync with
+The note beside each switch says where the item stands: *On the reader*,
+*Goes over at the next sync*, *Comes off at the next sync* or *Not on the
+reader*. A feed switches as a whole — its edition on the reader and the newer
+one waiting to replace it — and stays switched across new editions; like the
+Library, the queue shows only a feed's newest edition. A sync with
 nothing to upload still carries out any removals, so switching items off and
 syncing is enough to clear them from the device.
 

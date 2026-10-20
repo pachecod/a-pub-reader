@@ -689,12 +689,20 @@ const routes = {
     const entry = await outbox.get(id);
     if (!entry) return json(404, { error: 'That item is no longer here.' });
 
-    const folder = normalizePath(entry.folder || BOOKS_FOLDER);
+    // A feed is switched as a whole: its edition on the reader and the newer
+    // one waiting to replace it go on or off together.
+    const feedId = entry.source?.feedId;
+    const targets = feedId
+      ? (await outbox.list()).filter((i) => i.source?.feedId === feedId)
+      : [entry];
+
     const onReader = Boolean(on);
-    await outbox.update(id, { onReader });
-    if (entry.deliveredAt) {
-      if (onReader) await removals.remove(folder, entry.filename);
-      else await removals.add({ folder, filename: entry.filename, title: entry.title || entry.filename });
+    for (const target of targets) {
+      const folder = normalizePath(target.folder || BOOKS_FOLDER);
+      await outbox.update(target.id, { onReader });
+      if (!target.deliveredAt) continue;
+      if (onReader) await removals.remove(folder, target.filename);
+      else await removals.add({ folder, filename: target.filename, title: target.title || target.filename });
     }
     return json(200, { ok: true, item: await outbox.get(id), pending: (await removals.list()).length });
   },

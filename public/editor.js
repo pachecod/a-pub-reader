@@ -15,7 +15,7 @@
 // continuously would fight the caret and slowly mangle the document.
 //
 // The lifecycle mirrors that app's Preview -> Edit -> Rebuild -> Promote loop:
-// Save draft -> Build EPUB -> Send to reader, with each status line naming the
+// Save draft -> Build EPUB -> Sync Reader, with each status line naming the
 // next step.
 
 (function () {

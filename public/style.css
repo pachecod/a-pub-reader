@@ -655,6 +655,10 @@ a { color: var(--accent); }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; text-align: center; }
 
+/* Sync Reader at the top of the Library, with its result beside it. */
+.sync-bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.9rem; }
+.sync-bar .status { margin: 0; text-align: right; }
+
 /* The On reader switch on each Library card. */
 .reader-switch { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.55rem; font-size: 0.8rem; }
 .switch {

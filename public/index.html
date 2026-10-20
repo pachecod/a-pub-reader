@@ -35,6 +35,12 @@
   </div>
 
   <div class="panel" id="tab-read" role="tabpanel" aria-labelledby="tabbtn-read">
+    <!-- Makes the reader match the On reader switches below: sends what is
+         switched on and takes off what is switched off. -->
+    <div class="sync-bar">
+      <p id="read-sync-status" class="status" aria-live="polite"></p>
+      <button id="read-sync" type="button" class="primary" disabled>Sync Reader</button>
+    </div>
     <section id="read-onboarding" hidden>
       <h2 class="onboard-title">Nothing to read yet</h2>
       <p class="onboard-lead">
@@ -130,12 +136,6 @@
         </section>
       </aside>
     </div>
-
-    <p id="read-sent-key" class="sent-key" hidden>
-      <span><span class="sent-dot sent" aria-hidden="true"></span>Sent to eReader</span>
-      <span><span class="sent-dot" aria-hidden="true"></span>Not sent yet</span>
-      <span><span class="sent-dot off" aria-hidden="true"></span>Off the reader</span>
-    </p>
 
     <!-- The device's own folder listing. Replaced in the Library by each card's
          On reader switch, and kept hidden only because its folder picker still
@@ -305,7 +305,7 @@
         Reader address
         <input id="host" type="text" value="crosspoint.local" spellcheck="false">
         </label>
-        <button id="send" type="button" class="primary">Send to reader</button>
+        <button id="send" type="button" class="primary">Sync Reader</button>
         </div>
         <p id="send-status" class="status"></p>
         </section>
@@ -318,7 +318,7 @@
     <ol>
     <li>On the Xteink, open <strong>File Transfer</strong> and join your Wi-Fi.</li>
     <li>The screen shows an IP address — put it in <strong>Reader address</strong> if <code>crosspoint.local</code> doesn't resolve.</li>
-    <li>Keep the Mac on the same network, then hit <strong>Send to reader</strong>.</li>
+    <li>Keep the Mac on the same network, then hit <strong>Sync Reader</strong>.</li>
     </ol>
     <p class="muted"><strong>Hotspot mode instead:</strong> on the reader choose the hotspot option,
     join <code>CrossPoint-Reader</code> from your Mac's Wi-Fi menu, then click <strong>Hotspot</strong>

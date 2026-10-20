@@ -26,6 +26,9 @@ const el = {
   send: $('send'),
   removalNote: $('removal-note'),
   sendStatus: $('send-status'),
+  // The Library's own Sync Reader button and status line.
+  syncLibrary: $('read-sync'),
+  syncLibraryStatus: $('read-sync-status'),
   device: $('device'),
   deviceText: $('device-text'),
   deviceLabel: $('device-label'),
@@ -183,6 +186,7 @@ window.epubDrop = {
   // The Library tab lists delivered items and opens them in the same previewer.
   reloadRead: () => window.epubDropRead?.load(),
   preview: (entry) => openViewer(entry),
+  readerSwitch: (entry) => readerSwitch(entry),
   editorShown: () => window.epubDropEditor?.shown?.(),
 };
 
@@ -304,10 +308,27 @@ async function convert() {
   }
 }
 
+/**
+ * The queue as shown: like the Library, only the newest edition of each feed.
+ * An older edition still on the reader is replaced by the newer one at the
+ * next sync, and the feed's switch covers both.
+ */
+function shownResults() {
+  const seenFeeds = new Set();
+  return results.filter((r) => {
+    const feedId = r.source?.feedId;
+    if (!feedId) return true;
+    if (seenFeeds.has(feedId)) return false;
+    seenFeeds.add(feedId);
+    return true;
+  });
+}
+
 function renderResults(failures = []) {
-  el.resultsCount.textContent = results.length ? `· ${results.length}` : '';
-  if (el.resultsEmpty) el.resultsEmpty.hidden = results.length > 0 || failures.length > 0;
-  el.send.disabled = busy || (!results.some((r) => r.selected) && pendingRemovals.length === 0);
+  const shown = shownResults();
+  el.resultsCount.textContent = shown.length ? `· ${shown.length}` : '';
+  if (el.resultsEmpty) el.resultsEmpty.hidden = shown.length > 0 || failures.length > 0;
+  updateSyncButtons();
 
   const nodes = [];
 
@@ -327,17 +348,9 @@ function renderResults(failures = []) {
     nodes.push(li);
   }
 
-  for (const r of results) {
+  for (const r of shown) {
     const li = document.createElement('li');
     li.className = r.deliveredAt ? 'item delivered' : 'item';
-
-    const check = document.createElement('input');
-    check.type = 'checkbox';
-    check.checked = r.selected;
-    check.addEventListener('change', () => {
-      r.selected = check.checked;
-      el.send.disabled = busy || !results.some((x) => x.selected);
-    });
 
     const body = document.createElement('div');
     body.className = 'item-body';
@@ -402,12 +415,8 @@ function renderResults(failures = []) {
       warn.textContent = r.warnings.join(' · ');
       body.appendChild(warn);
     }
-    if (r.sendState === 'ok') {
-      const ok = document.createElement('div');
-      ok.className = 'item-ok';
-      ok.textContent = `✓ On the reader — ${r.sendMessage || 'sent'}`;
-      body.appendChild(ok);
-    }
+    // The same On reader switch as the Library card, so the two always agree.
+    body.appendChild(readerSwitch(r));
     if (r.sendState === 'bad') {
       const bad = document.createElement('div');
       bad.className = 'item-err';
@@ -422,7 +431,7 @@ function renderResults(failures = []) {
     remove.textContent = '×';
     remove.addEventListener('click', () => removeFromQueue(r));
 
-    li.append(check, body, remove);
+    li.append(body, remove);
     nodes.push(li);
   }
 
@@ -448,13 +457,90 @@ function summarize(okCount, payload) {
   return `${parts.join(' · ')}.`;
 }
 
-async function send() {
-  const selected = results.filter((r) => r.selected);
+// ---------------------------------------------------------------- sync
+//
+// One switch per item decides what belongs on the reader; Sync Reader makes
+// the reader match: it sends everything switched on that is not there yet, and
+// carries out the removals queued by switching things off.
+
+/** Items switched on that have not reached the reader yet. */
+function toSync() {
+  return results.filter((r) => r.onReader && !r.deliveredAt);
+}
+
+const syncLabel = () => (el.destination.value !== 'wifi' ? 'Sync drive' : 'Sync Reader');
+
+function updateSyncButtons() {
+  const idle = !toSync().length && !pendingRemovals.length;
+  for (const button of [el.send, el.syncLibrary]) {
+    if (button) button.disabled = busy || idle;
+  }
+}
+
+/** Where an item stands, in the words under its switch. */
+function readerState(entry) {
+  const on = entry.onReader !== false;
+  if (on) return entry.deliveredAt ? 'On the reader' : 'Goes over at the next sync';
+  return entry.deliveredAt ? 'Comes off at the next sync' : 'Not on the reader';
+}
+
+/**
+ * The On reader switch, used on Library cards and in the queue on Add/Remove.
+ * On: it goes to the reader at the next sync, or stays there. Off: it is not
+ * sent, or comes off at the next sync. The app keeps its copy either way.
+ */
+function readerSwitch(entry) {
+  const on = entry.onReader !== false;
+  const wrap = document.createElement('div');
+  wrap.className = 'reader-switch';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'switch';
+  toggle.setAttribute('role', 'switch');
+  toggle.setAttribute('aria-checked', String(on));
+  toggle.setAttribute('aria-label', `On reader: ${entry.title}`);
+  toggle.title = on ? 'Switch off to keep it off the reader' : 'Switch on to put it on the reader';
+  toggle.innerHTML = '<span class="switch-knob" aria-hidden="true"></span>';
+  toggle.addEventListener('click', () => setOnReader(entry, !on, toggle));
+
+  const label = document.createElement('span');
+  label.className = 'switch-label';
+  label.textContent = 'On reader';
+
+  const note = document.createElement('span');
+  note.className = 'switch-note';
+  note.textContent = readerState(entry);
+
+  wrap.append(toggle, label, note);
+  return wrap;
+}
+
+async function setOnReader(entry, on, toggle) {
+  toggle.disabled = true;
+  toggle.setAttribute('aria-checked', String(on));
+  try {
+    const { pending } = await api('/api/outbox/on-reader', {
+      method: 'POST',
+      body: JSON.stringify({ id: entry.id, on }),
+    });
+    // Reloading the queue redraws both lists, the badge and the sync buttons.
+    await loadRemovals(pending);
+    await loadOutbox();
+  } catch (err) {
+    toggle.setAttribute('aria-checked', String(!on));
+    toggle.disabled = false;
+    setStatus(err.message, 'bad');
+  }
+}
+
+async function send(trigger = el.send) {
+  const selected = toSync();
   // A sync with nothing to upload still has work to do if files are queued to
   // come off the reader.
   if (busy || (!selected.length && !pendingRemovals.length)) return;
 
-  setBusy(true, el.send, 'Sending…');
+  setBusy(true, trigger, 'Syncing…');
   setStatus('');
 
   try {
@@ -478,9 +564,6 @@ async function send() {
         state: outcome.ok ? 'ok' : 'bad',
         message: outcome.ok ? outcome.message : outcome.error,
       });
-      // Leave failures checked so the retry is one click.
-      const match = results.find((r) => r.id === outcome.id);
-      if (match && outcome.ok) match.selected = false;
     }
 
     const failures = payload.results.filter((r) => !r.ok);
@@ -493,7 +576,7 @@ async function send() {
         .join(', ');
       const more = failures.length > 3 ? ` +${failures.length - 3} more` : '';
       setStatus(
-        `Sent ${okCount}. Failed: ${named}${more} — the reason is on each row below.`,
+        `Sent ${okCount}. Failed: ${named}${more} — the reason is on each row in Add/Remove. Sync again to retry.`,
         'bad'
       );
     } else {
@@ -512,7 +595,7 @@ async function send() {
   } catch (err) {
     setStatus(err.message, 'bad');
   } finally {
-    setBusy(false, el.send, 'Send to reader');
+    setBusy(false, trigger, syncLabel());
   }
 }
 
@@ -1182,17 +1265,13 @@ function renderRemovals() {
       `${names.join(', ')}${n > names.length ? `, and ${n - names.length} more` : ''}.`;
   }
   // A sync that only deletes is still worth doing, so Send stays available.
-  el.send.disabled = busy || (!results.some((r) => r.selected) && n === 0);
+  updateSyncButtons();
 }
 
 async function loadOutbox() {
   try {
     const { items } = await api('/api/outbox');
-    // Preserve tick state for anything already on screen.
-    const chosen = new Map(results.map((r) => [r.id, r.selected]));
-    // An item switched off in the Library is not queued for the reader; any
-    // copy already there is covered by the removal note instead.
-    results = items.filter((entry) => entry.onReader !== false).map((entry) => ({
+    results = items.map((entry) => ({
       id: entry.id,
       filename: entry.filename,
       title: entry.title,
@@ -1207,8 +1286,7 @@ async function loadOutbox() {
       deliveredAt: entry.deliveredAt,
       deliveredTo: entry.deliveredTo,
       warnings: [],
-      // Default to sending what hasn't been sent yet.
-      selected: chosen.has(entry.id) ? chosen.get(entry.id) : !entry.deliveredAt,
+      onReader: entry.onReader !== false,
       // A recorded outcome wins over the stored state: it is the newer news,
       // and a failure message is what tells you which row to look at.
       sendState: sendOutcomes.get(entry.id)?.state ?? (entry.deliveredAt ? 'ok' : undefined),
@@ -1220,7 +1298,8 @@ async function loadOutbox() {
 
     // Two other places depend on the queue: the badge on the tab bar, and the
     // Library tab's list of what has been sent.
-    window.epubDropTabs?.setPending(results.filter((r) => !r.deliveredAt).length);
+    window.epubDropTabs?.setPending(toSync().length);
+    updateSyncButtons();
     window.epubDropRead?.load();
   } catch (err) {
     setStatus(err.message, 'bad');
@@ -1272,7 +1351,7 @@ function syncDestination() {
   el.hostField.hidden = viaVolume;
   el.find.hidden = viaVolume;
   el.useHotspot.hidden = viaVolume;
-  el.send.textContent = viaVolume ? 'Copy to drive' : 'Send to reader';
+  for (const button of [el.send, el.syncLibrary]) if (button) button.textContent = syncLabel();
 
   if (viaVolume) {
     const volume = volumes.find((v) => v.path === el.destination.value);
@@ -1565,7 +1644,7 @@ async function saveConfig() {
 function setBusy(state, button, label) {
   busy = state;
   el.convert.disabled = busy || queue.length === 0;
-  el.send.disabled = busy || (!results.some((r) => r.selected) && pendingRemovals.length === 0);
+  updateSyncButtons();
   el.deleteLibrary.disabled = busy || !libraryCanDelete || !library.some((f) => f.selected);
   if (state) {
     button.disabled = true;
@@ -1576,8 +1655,11 @@ function setBusy(state, button, label) {
 }
 
 function setStatus(text, kind = '') {
-  el.sendStatus.textContent = text;
-  el.sendStatus.className = `status ${kind}`;
+  for (const line of [el.sendStatus, el.syncLibraryStatus]) {
+    if (!line) continue;
+    line.textContent = text;
+    line.className = `status ${kind}`;
+  }
 }
 
 function formatBytes(n) {
@@ -1655,7 +1737,8 @@ el.clearResults.addEventListener('click', async () => {
   }
 });
 el.convert.addEventListener('click', convert);
-el.send.addEventListener('click', send);
+el.send.addEventListener('click', () => send(el.send));
+el.syncLibrary?.addEventListener('click', () => send(el.syncLibrary));
 el.find.addEventListener('click', findDevice);
 el.useHotspot.addEventListener('click', async () => {
   el.host.value = '192.168.4.1';

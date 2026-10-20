@@ -36,7 +36,6 @@
     feedsMore: $('read-feeds-more'),
     booksMore: $('read-books-more'),
     notesMore: $('read-notes-more'),
-    sentKey: $('read-sent-key'),
   };
 
   async function api(path, options = {}) {
@@ -74,24 +73,13 @@
 
     const title = document.createElement('div');
     title.className = 'item-title';
-    // Where it stands on the reader, which the On reader switch below steers:
-    // a green tick once it is there, red while it waits for the next sync, and
-    // a hollow circle when it is switched off and not on the reader. The key at
-    // the foot of the tab explains them.
-    const on = entry.onReader !== false;
-    const dot = document.createElement('span');
-    dot.className = entry.deliveredAt ? 'sent-dot sent' : on ? 'sent-dot' : 'sent-dot off';
-    const state = entry.deliveredAt ? 'Sent to the eReader' : on ? 'Not sent yet' : 'Not on the reader';
-    dot.title = state;
-    dot.setAttribute('role', 'img');
-    dot.setAttribute('aria-label', state);
     // The title is the way in: it opens the reading page, which links on to
     // the device-shaped eBook view and the download.
     const link = document.createElement('a');
     link.href = `/read/${entry.id}`;
     link.className = 'card-title-link';
     link.textContent = entry.author ? `${entry.title} — ${entry.author}` : entry.title;
-    title.append(dot, link);
+    title.append(link);
     body.appendChild(title);
 
     const meta = document.createElement('div');
@@ -111,7 +99,10 @@
     meta.append(bits.filter(Boolean).join(' · '));
     body.appendChild(meta);
 
-    body.appendChild(readerSwitch(entry, on));
+    // The one control for the reader: the same switch as on Add/Remove, with
+    // a note saying where the item stands.
+    const toggle = window.epubDrop?.readerSwitch?.(entry);
+    if (toggle) body.appendChild(toggle);
     li.appendChild(body);
 
     // Downloading lives on the reading page; the card itself only reads or
@@ -125,64 +116,6 @@
     forget.addEventListener('click', () => askForget(entry));
     li.appendChild(forget);
     return li;
-  }
-
-  /**
-   * The On reader switch, with a note when the next sync will change things.
-   * On sends it at the next sync; off keeps it from going, or takes it off the
-   * reader at the next sync. The app keeps its copy either way.
-   */
-  function readerSwitch(entry, on) {
-    const wrap = document.createElement('div');
-    wrap.className = 'reader-switch';
-
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'switch';
-    toggle.setAttribute('role', 'switch');
-    toggle.setAttribute('aria-checked', String(on));
-    toggle.setAttribute('aria-label', `On reader: ${entry.title}`);
-    toggle.title = on ? 'On the reader — switch off to take it off at the next sync' : 'Off the reader — switch on to send it at the next sync';
-    toggle.innerHTML = '<span class="switch-knob" aria-hidden="true"></span>';
-    toggle.addEventListener('click', () => setOnReader(entry, !on, toggle));
-
-    const label = document.createElement('span');
-    label.className = 'switch-label';
-    label.textContent = 'On reader';
-
-    wrap.append(toggle, label);
-
-    const pending = on && !entry.deliveredAt
-      ? 'goes over at the next sync'
-      : !on && entry.deliveredAt
-        ? 'comes off at the next sync'
-        : '';
-    if (pending) {
-      const note = document.createElement('span');
-      note.className = 'switch-note';
-      note.textContent = pending;
-      wrap.appendChild(note);
-    }
-    return wrap;
-  }
-
-  async function setOnReader(entry, on, toggle) {
-    toggle.disabled = true;
-    toggle.setAttribute('aria-checked', String(on));
-    try {
-      const { pending } = await api('/api/outbox/on-reader', {
-        method: 'POST',
-        body: JSON.stringify({ id: entry.id, on }),
-      });
-      // The queue on Add/Remove and its badge follow the switch; reloading it
-      // reloads this tab too.
-      window.epubDrop?.reloadRemovals?.(pending);
-      window.epubDrop?.reloadQueue?.();
-    } catch (err) {
-      toggle.setAttribute('aria-checked', String(!on));
-      toggle.disabled = false;
-      alert(err.message);
-    }
   }
 
   function openEpub(entry) {
@@ -224,7 +157,6 @@
       el.booksSection.hidden = nothingYet;
       el.notesSection.hidden = nothingYet;
       el.feedsSection.hidden = nothingYet;
-      el.sentKey.hidden = nothingYet;
 
       el.booksCount.textContent = books.length ? `· ${books.length}` : '';
       el.feedsCount.textContent = feeds.length ? `· ${feeds.length}` : '';

@@ -231,7 +231,7 @@
 
     try {
       // No destination: a refresh only builds and queues, so it works with the
-      // reader switched off, and the queue is pushed later from Send to reader.
+      // reader switched off, and the queue is pushed later with Sync Reader.
       const data = await api('/api/feeds/refresh', {
         method: 'POST',
         body: JSON.stringify(id ? { id } : {}),
@@ -253,7 +253,7 @@
         setStatus(`${built.length} queued, ${failed.length} failed: ${failed.map((x) => x.error).join('; ')}`, 'bad');
       } else {
         setStatus(
-          `Queued ${built.length} feed${built.length === 1 ? '' : 's'} for ${folder} — hit Send to reader when connected.`,
+          `Queued ${built.length} feed${built.length === 1 ? '' : 's'} for ${folder} — hit Sync Reader when connected.`,
           'ok'
         );
       }

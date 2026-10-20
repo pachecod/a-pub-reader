@@ -224,7 +224,7 @@
       setStatus(
         failed.length
           ? `Queued ${ok.length}, ${failed.length} failed.`
-          : `Queued ${ok.length} book${ok.length === 1 ? '' : 's'} — hit Send to reader when connected.`,
+          : `Queued ${ok.length} book${ok.length === 1 ? '' : 's'} — hit Sync Reader when connected.`,
         failed.length ? 'bad' : 'ok'
       );
 
