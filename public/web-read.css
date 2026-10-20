@@ -7,6 +7,9 @@
   --text: #1d1c1a;
   --muted: #6b6760;
   --accent: #1f6feb;
+  --line-strong: #c4bfb5;
+  --button-top: #ffffff;
+  --button-bottom: #f4f2ee;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,6 +20,9 @@
     --text: #e7e9ee;
     --muted: #9aa2b1;
     --accent: #7cb0ff;
+    --line-strong: #444b57;
+    --button-top: #2a2f38;
+    --button-bottom: #22262e;
   }
 }
 
@@ -64,15 +70,35 @@ a { color: var(--accent); }
 }
 .menu a:hover { color: var(--text); border-bottom-color: var(--line); }
 .menu a[aria-current="page"] { color: var(--accent); border-bottom: 3px solid var(--accent); font-weight: 600; }
-.bar-actions { display: flex; align-items: center; gap: 1rem; margin-left: auto; font-size: 14px; }
-.bar-actions a:hover { text-decoration: underline; }
+.bar-actions { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; font-size: 14px; }
+
+/* This book's actions, as buttons with an icon: an open book, a download arrow. */
+.bar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: linear-gradient(var(--button-top), var(--button-bottom));
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.bar-button svg { flex: none; color: var(--accent); }
+.bar-button:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 2px 6px rgba(16, 24, 40, 0.12); }
+.bar-button:active { transform: translateY(1px); box-shadow: inset 0 1px 3px rgba(16, 24, 40, 0.2); }
 
 /* Narrow screens: the name gives way to the logo, and everything closes up. */
 @media (max-width: 640px) {
   .bar { gap: 0.6rem; padding: 0 0.75rem; }
   .brand span { display: none; }
   .menu a { padding: 0 0.45rem; font-size: 0.85rem; }
-  .bar-actions { gap: 0.6rem; font-size: 12px; }
+  .bar-actions { gap: 0.35rem; }
+  /* Icons only; the labels stay available to screen readers. */
+  .bar-button { padding: 0.4rem 0.5rem; }
+  .bar-button span { display: none; }
 }
 
 .page {
