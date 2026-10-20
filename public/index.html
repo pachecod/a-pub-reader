@@ -80,10 +80,7 @@
         <section id="read-feeds-section">
           <div class="row-between">
             <h2>Feed editions <span id="read-feeds-count" class="muted"></span></h2>
-            <div class="row-tight">
-              <span class="muted" id="read-feeds-folder"></span>
-              <button id="read-refresh" type="button" class="link">Refresh</button>
-            </div>
+            <button id="read-refresh" type="button" class="link">Refresh</button>
           </div>
           <ul id="read-feeds" class="list shelf"></ul>
           <p id="read-feeds-more" class="shelf-more" hidden>
@@ -102,7 +99,6 @@
         <section id="read-notes-section">
           <div class="row-between">
             <h2>Notes <span id="read-notes-count" class="muted"></span></h2>
-            <span class="muted" id="read-notes-folder"></span>
           </div>
           <ul id="read-notes" class="list shelf"></ul>
           <p id="read-notes-more" class="shelf-more" hidden>
@@ -138,9 +134,13 @@
     <p id="read-sent-key" class="sent-key" hidden>
       <span><span class="sent-dot sent" aria-hidden="true"></span>Sent to eReader</span>
       <span><span class="sent-dot" aria-hidden="true"></span>Not sent yet</span>
+      <span><span class="sent-dot off" aria-hidden="true"></span>Off the reader</span>
     </p>
 
-    <section id="library-section">
+    <!-- The device's own folder listing. Replaced in the Library by each card's
+         On reader switch, and kept hidden only because its folder picker still
+         holds the books-folder setting. -->
+    <section id="library-section" hidden>
     <div class="row-between">
     <h2>On the reader <span id="library-folder" class="muted"></span></h2>
     <div class="row-tight">

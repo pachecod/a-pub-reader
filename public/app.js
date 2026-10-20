@@ -37,6 +37,7 @@ const el = {
   librarySection: $('library-section'),
   library: $('library'),
   libraryFolder: $('library-folder'),
+  librarySection: $('library-section'),
   libraryStatus: $('library-status'),
   libraryAll: $('library-all'),
   refreshLibrary: $('refresh-library'),
@@ -1189,7 +1190,9 @@ async function loadOutbox() {
     const { items } = await api('/api/outbox');
     // Preserve tick state for anything already on screen.
     const chosen = new Map(results.map((r) => [r.id, r.selected]));
-    results = items.map((entry) => ({
+    // An item switched off in the Library is not queued for the reader; any
+    // copy already there is covered by the removal note instead.
+    results = items.filter((entry) => entry.onReader !== false).map((entry) => ({
       id: entry.id,
       filename: entry.filename,
       title: entry.title,
@@ -1282,6 +1285,9 @@ function syncDestination() {
 // ---------------------------------------------------------------- library
 
 async function loadLibrary() {
+  // Hidden in favour of the Library's On reader switches; listing the device
+  // for a section nobody sees would only probe it for nothing.
+  if (el.librarySection?.hidden) return;
   el.refreshLibrary.disabled = true;
   try {
     const data = await api(

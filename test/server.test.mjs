@@ -442,26 +442,79 @@ try {
     'the queue names the file and its folder'
   );
 
-  // A sync with nothing to upload still carries out the removal.
+  // A sync with nothing to upload still carries out the removal — switching
+  // an item off in the Library and syncing is exactly this.
   const sweep = await api('/api/send', {
     method: 'POST',
     body: JSON.stringify({ ids: [], host: DEVICE_HOST }),
   });
-  assert(sweep.status === 400, 'a send with no ids and no removals is still rejected');
-
-  const sweep2 = await api('/api/send', {
-    method: 'POST',
-    body: JSON.stringify({ ids: [keepEntry.id], host: DEVICE_HOST }),
-  });
+  assert(sweep.status === 200, `a removal-only sync is accepted: ${sweep.status}`);
   assert(
     !sd.has(`/A-pub Books/${doomed.filename}`),
     'the sync deleted the forgotten file from the device'
   );
   assert(
-    sweep2.body.removed?.some((r) => r.ok && r.filename === doomed.filename),
+    sweep.body.removed?.some((r) => r.ok && r.filename === doomed.filename),
     'the sync reports what it removed'
   );
   assert((await api('/api/removals')).body.removals.length === 0, 'the removal queue is now empty');
+
+  const idle = await api('/api/send', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [], host: DEVICE_HOST }),
+  });
+  assert(idle.status === 400, 'a send with no ids and no removals is still rejected');
+
+  console.log('\n== on reader switch ==');
+  const switched = (
+    await api('/api/convert', {
+      method: 'POST',
+      body: JSON.stringify({
+        includeImages: false,
+        items: [
+          {
+            name: 'switch.html',
+            text: `<html lang="en"><head><title>Switch Me</title></head><body><article><h1>Switch Me</h1><p>${paragraph.repeat(3)}</p></article></body></html>`,
+          },
+        ],
+      }),
+    })
+  ).body.results.find((r) => r.ok);
+  const onDevice = () => sd.has(`/A-pub Books/${switched.filename}`);
+  const record = async () => (await api('/api/outbox')).body.items.find((i) => i.id === switched.id);
+  const setSwitch = (on) =>
+    api('/api/outbox/on-reader', { method: 'POST', body: JSON.stringify({ id: switched.id, on }) });
+
+  await setSwitch(false);
+  const skipped = await api('/api/send', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [switched.id], host: DEVICE_HOST }),
+  });
+  assert(!onDevice() && skipped.body.results[0]?.ok === false, 'an item switched off before sending is not sent');
+  assert((await record()).onReader === false, 'the switch is remembered on the item');
+
+  await setSwitch(true);
+  await api('/api/send', { method: 'POST', body: JSON.stringify({ ids: [switched.id], host: DEVICE_HOST }) });
+  assert(onDevice(), 'switched on, it goes over at the next sync');
+
+  const off = await setSwitch(false);
+  assert(off.body.pending === 1 && onDevice(), 'switching off a sent item queues it to come off, without removing it yet');
+  const backOn = await setSwitch(true);
+  assert(backOn.body.pending === 0, 'switching back on before a sync cancels the removal');
+
+  await setSwitch(false);
+  await api('/api/send', { method: 'POST', body: JSON.stringify({ ids: [], host: DEVICE_HOST }) });
+  const afterOff = await record();
+  assert(!onDevice(), 'the next sync takes it off the reader');
+  assert(Boolean(afterOff) && afterOff.deliveredAt === null, 'it stays in the Library, no longer marked as sent');
+
+  await setSwitch(true);
+  assert((await api('/api/removals')).body.removals.length === 0, 'switching on again queues no removal');
+  await api('/api/send', { method: 'POST', body: JSON.stringify({ ids: [switched.id], host: DEVICE_HOST }) });
+  assert(onDevice() && Boolean((await record()).deliveredAt), 'and the next sync puts it back');
+
+  const unknownSwitch = await api('/api/outbox/on-reader', { method: 'POST', body: JSON.stringify({ id: 'nope', on: true }) });
+  assert(unknownSwitch.status === 404, 'switching an unknown item is a 404');
 
   console.log('\n== remove everything ==');
   // Both forgets above emptied the queue of delivered items, so put two back.
@@ -524,8 +577,9 @@ try {
     body: JSON.stringify({ confirm: 'i agree', fromDevice: true }),
   });
   assert(wiped.body.ok === true, `the phrase is accepted case-insensitively`);
-  assert(wiped.body.items === 3, `sent and unsent items are both removed: ${wiped.body.items}`);
-  assert(wiped.body.pending === 2, `only what reached the reader is queued for it: ${wiped.body.pending}`);
+  // Two sent above, one never sent, and the item from the switch tests (sent).
+  assert(wiped.body.items === 4, `sent and unsent items are both removed: ${wiped.body.items}`);
+  assert(wiped.body.pending === 3, `only what reached the reader is queued for it: ${wiped.body.pending}`);
   assert((await api('/api/outbox')).body.items.length === 0, 'the queue is empty');
   assert((await api('/api/feeds')).body.feeds.length === 0, 'no feeds are followed');
   assert((await api('/api/drafts')).body.drafts.length === 0, 'no drafts are left');

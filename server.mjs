@@ -519,6 +519,11 @@ async function refreshFeed(feed) {
   const diskPath = path.join(OUT_DIR, `${id}-${filename}`);
   await fs.writeFile(diskPath, built.buffer);
 
+  // A feed switched off in the Library stays off: its new edition inherits the
+  // switch from the newest one before it.
+  const previous = (await outbox.list()).find((i) => i.source?.feedId === feed.id);
+  const onReader = previous ? previous.onReader !== false : true;
+
   // Drop any earlier un-sent edition of this feed: two pending copies of the
   // same feed in the queue would both try to go over, and only the newer one is
   // wanted.
@@ -540,6 +545,7 @@ async function refreshFeed(feed) {
     // remove and which feed to update.
     replaces: feed.lastFilename || null,
     source: { kind: 'feed', label: title, feedId: feed.id, items: items.length },
+    onReader,
   });
 
   steps.push(`Built ${filename} (${built.chapters} chapter(s), ${Math.round(built.buffer.length / 1024)} KB)`);
@@ -668,6 +674,29 @@ const routes = {
     } catch (err) {
       return json(400, { error: err.message });
     }
+  },
+
+  /**
+   * The On reader switch on a Library card.
+   *
+   * On: the item goes to the reader at the next sync — or, if it is there and
+   * was about to be taken off, it now stays. Off: it is not sent, and if it is
+   * on the reader it comes off at the next sync. Either way the app keeps its
+   * copy, so the item can still be read here.
+   */
+  'POST /api/outbox/on-reader': async (req) => {
+    const { id, on } = await body(req);
+    const entry = await outbox.get(id);
+    if (!entry) return json(404, { error: 'That item is no longer here.' });
+
+    const folder = normalizePath(entry.folder || BOOKS_FOLDER);
+    const onReader = Boolean(on);
+    await outbox.update(id, { onReader });
+    if (entry.deliveredAt) {
+      if (onReader) await removals.remove(folder, entry.filename);
+      else await removals.add({ folder, filename: entry.filename, title: entry.title || entry.filename });
+    }
+    return json(200, { ok: true, item: await outbox.get(id), pending: (await removals.list()).length });
   },
 
   'POST /api/outbox/remove': async (req) => {
@@ -1007,7 +1036,11 @@ const routes = {
   'POST /api/send-volume': async (req) => {
     const payload = await body(req);
     const ids = Array.isArray(payload.ids) ? payload.ids : [];
-    if (!ids.length) return json(400, { error: 'Nothing selected to send.' });
+    // A sync with nothing to upload still has work to do when files are queued
+    // to come off the reader — switching an item off is exactly that.
+    if (!ids.length && !(await removals.list()).length) {
+      return json(400, { error: 'Nothing selected to send.' });
+    }
 
     const folder = BOOKS_FOLDER;
     const volume = await resolveVolume(payload.volume);
@@ -1021,6 +1054,11 @@ const routes = {
       const entry = await outbox.get(id);
       if (!entry) {
         results.push({ id, ok: false, error: 'That file is no longer in the queue.' });
+        continue;
+      }
+      // Switched off in the Library: it stays here, and does not go over.
+      if (entry.onReader === false) {
+        results.push({ id, ok: false, filename: entry.filename, error: 'Switched off — not sent to the reader.' });
         continue;
       }
 
@@ -1226,7 +1264,11 @@ const routes = {
   'POST /api/send': async (req) => {
     const payload = await body(req);
     const ids = Array.isArray(payload.ids) ? payload.ids : [];
-    if (!ids.length) return json(400, { error: 'Nothing selected to send.' });
+    // A sync with nothing to upload still has work to do when files are queued
+    // to come off the reader — switching an item off is exactly that.
+    if (!ids.length && !(await removals.list()).length) {
+      return json(400, { error: 'Nothing selected to send.' });
+    }
 
     const config = await readConfig();
     // Where a queued item goes is decided by what it is, not by a form field:
@@ -1248,6 +1290,11 @@ const routes = {
       const entry = await outbox.get(id);
       if (!entry) {
         results.push({ id, ok: false, error: 'That file is no longer in the queue.' });
+        continue;
+      }
+      // Switched off in the Library: it stays here, and does not go over.
+      if (entry.onReader === false) {
+        results.push({ id, ok: false, filename: entry.filename, error: 'Switched off — not sent to the reader.' });
         continue;
       }
 
@@ -1311,18 +1358,35 @@ const routes = {
  *
  * @param {{delete: (folder: string, filename: string) => Promise<boolean>}} how
  */
+/**
+ * A file that came off the reader because its item was switched off: the item
+ * stays in the Library, readable here, and is no longer recorded as sent — so
+ * switching it back on queues it to go over again.
+ */
+async function markTakenOff(folder, filename) {
+  for (const entry of await outbox.list()) {
+    if (entry.onReader !== false || !entry.deliveredAt || entry.filename !== filename) continue;
+    if (normalizePath(entry.folder || BOOKS_FOLDER) !== folder) continue;
+    await outbox.update(entry.id, { deliveredAt: null, deliveredTo: null });
+  }
+}
+
 async function runRemovals(how) {
   const queued = await removals.list();
   const done = [];
+  const finished = async (item) => {
+    await removals.remove(item.folder, item.filename);
+    await markTakenOff(item.folder, item.filename);
+  };
 
   for (const item of queued) {
     try {
       await how.delete(item.folder, item.filename);
-      await removals.remove(item.folder, item.filename);
+      await finished(item);
       done.push({ ok: true, folder: item.folder, filename: item.filename, title: item.title });
     } catch (err) {
       const gone = /not found|no such file|404/i.test(err.message || '');
-      if (gone) await removals.remove(item.folder, item.filename);
+      if (gone) await finished(item);
       done.push({
         ok: gone,
         folder: item.folder,

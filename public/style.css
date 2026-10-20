@@ -351,6 +351,9 @@ textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--ac
   vertical-align: 0.08em;
   flex: none;
 }
+/* Off the reader: switched off in the Library, and not on the device. */
+.sent-dot.off { background: transparent; border: 1.5px solid var(--muted); }
+
 /* Sent: a ticked checkbox, green with a black outline, rather than a dot. */
 .sent-dot.sent {
   position: relative;
@@ -651,6 +654,41 @@ a { color: var(--accent); }
 }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; text-align: center; }
+
+/* The On reader switch on each Library card. */
+.reader-switch { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.55rem; font-size: 0.8rem; }
+.switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel-2);
+  box-shadow: inset 0 1px 2px rgba(16, 24, 40, 0.15);
+  flex: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.3);
+  transition: transform 0.15s;
+}
+.switch[aria-checked="true"] { background: var(--ok); border-color: var(--ok); }
+.switch[aria-checked="true"] .switch-knob { transform: translateX(14px); }
+.switch:hover:not(:disabled) { border-color: var(--accent); }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch:disabled { opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch-knob { transition: none; } }
+.switch-label { color: var(--text); font-weight: 500; }
+.switch-note { color: var(--muted); }
+.switch-note::before { content: '· '; }
 /* Controls the Library's links scroll to stay clear of the sticky menu bar. */
 #discover-open, #books-browse, #new-draft { scroll-margin-top: 84px; }
 

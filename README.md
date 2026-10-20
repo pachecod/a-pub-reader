@@ -400,7 +400,22 @@ closes. Fixed-layout books ignore all of this and page through their images.
 
 ## Managing what's on the reader
 
-The **On the reader** section lists the managed folder and can delete from it.
+Each card in the **Library** has an **On reader** switch:
+
+- **On** (the default): the item goes to the reader at the next sync, or stays
+  there if it already is.
+- **Off**: it is not sent, and if it is on the reader it is taken off at the
+  next sync. The app keeps its copy, so it can still be read in the browser,
+  and switching it back on sends it again.
+
+A note on the card says when the next sync will change something. A feed
+switched off stays off: each new edition inherits the switch. A sync with
+nothing to upload still carries out any removals, so switching items off and
+syncing is enough to clear them from the device.
+
+The older **On the reader** folder listing is hidden in favour of the switches
+(its folder picker still holds the books-folder setting). Its server routes
+list the managed folder and can delete from it.
 Scope is enforced on the server, not in the browser: requests carry bare
 filenames, the folder comes from saved config, and each name must appear in a
 fresh device listing of that folder as a plain file. Nothing outside the folder
