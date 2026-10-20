@@ -2,7 +2,7 @@
 
 // Tab switching, plus the pending-queue badge.
 //
-// Read is the default because that is the common case: you open the app to see
+// Library is the default because that is the common case: you open the app to see
 // what is on the reader, not to add something. Adding and writing are the less
 // frequent, more deliberate acts.
 //
@@ -37,7 +37,7 @@
       tab.classList.toggle('active', active);
     }
 
-    // Opening Read should show current information, not whatever was cached
+    // Opening Library should show current information, not whatever was cached
     // when the page loaded — but not on the very first show, since read.js
     // loads itself and app.js reloads it whenever the queue changes.
     if (name === 'read' && shown) window.epubDrop?.reloadRead?.();
@@ -68,7 +68,7 @@
     const tab = event.target.closest('.tab');
     if (!tab) return;
     show(tab.dataset.tab);
-    // Clicking Read, even when already on it, brings in the latest feeds.
+    // Clicking Library, even when already on it, brings in the latest feeds.
     if (tab.dataset.tab === 'read') window.epubDropFeeds?.refreshAll();
   });
 

@@ -442,7 +442,7 @@ async function afterDelivery(entry, { label, removeOld }) {
     await feeds.update(feedId, { lastFilename: entry.filename, lastError: null }).catch(() => {});
 
     // Only one edition of a feed can be on the device at a time — each refresh
-    // replaces the last. Keeping the superseded records would make the Read tab
+    // replaces the last. Keeping the superseded records would make the Library tab
     // claim a dozen editions are on the reader when there is one.
     for (const other of await outbox.list()) {
       if (other.id === entry.id) continue;

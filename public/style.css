@@ -340,7 +340,7 @@ textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--ac
   padding: 0.1rem 0.3rem;
 }
 .item .remove:hover { color: var(--bad); }
-/* Read tab: sent (green) or not sent yet (red), with a key below the lists. */
+/* Library tab: sent (green) or not sent yet (red), with a key below the lists. */
 .sent-dot {
   display: inline-block;
   width: 9px;
@@ -652,11 +652,11 @@ a { color: var(--accent); }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; }
 
-/* Read tab cards: the title links to the reading page. */
+/* Library tab cards: the title links to the reading page. */
 .card-title-link { color: var(--accent); text-decoration: none; }
 .card-title-link:hover { text-decoration: underline; }
 
-/* Read tab cards: Forget is a small × in the top right corner. */
+/* Library tab cards: Forget is a small × in the top right corner. */
 .shelf .item { position: relative; }
 .shelf .item .item-title { padding-right: 1.6rem; }
 .card-forget {
@@ -799,7 +799,7 @@ a { color: var(--accent); }
 #read-notes-section .list,
 #read-feeds-section .list { max-height: none; }
 
-/* Read tab: feed editions in the wide column, notes and books in a sidebar on
+/* Library tab: feed editions in the wide column, notes and books in a sidebar on
    a large screen; everything stacks (feeds, notes, books) below that. */
 .read-layout { display: flex; flex-direction: column; gap: 1.5rem; }
 .read-main, .read-side { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }
@@ -814,7 +814,7 @@ a { color: var(--accent); }
   .read-side .shelf { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* Read tab, first run */
+/* Library tab, first run */
 #read-onboarding {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -933,7 +933,7 @@ a { color: var(--accent); }
 
 .viewer-page-count { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 
-/* The Read tab's shelves tile when there is room for it.
+/* The Library tab's shelves tile when there is room for it.
    These are self-contained cards of about equal size, unlike the queue and
    library rows, so on a wide window a single column is mostly empty space and
    a lot of needless scrolling. auto-fill does this without a breakpoint: one

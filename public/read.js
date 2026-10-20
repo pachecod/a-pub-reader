@@ -1,6 +1,6 @@
 'use strict';
 
-// The Read tab: everything this app has built, whether or not it has reached
+// The Library tab: everything this app has built, whether or not it has reached
 // the reader yet.
 //
 // Built from the queue's entries, split into books, notes and feed editions,

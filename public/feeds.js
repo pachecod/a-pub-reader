@@ -413,7 +413,7 @@
   });
   el.refreshAll.addEventListener('click', () => refreshFeeds());
 
-  // Clicking Read fetches the latest editions, whenever it was last done.
+  // Clicking Library fetches the latest editions, whenever it was last done.
   // A refresh already running is left to finish rather than started twice.
   window.epubDropFeeds = {
     refreshAll: () => {

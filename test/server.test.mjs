@@ -387,7 +387,7 @@ try {
   assert(sd.has('/toplevel.epub'), 'root file still survived');
 
   console.log('\n== forgetting takes the reader\'s copy too ==');
-  // The bug this covers: the Read tab and the device disagreed. Forgetting
+  // The bug this covers: the Library tab and the device disagreed. Forgetting
   // dropped the app's record and left the file sitting on the reader, with
   // nothing in the interface saying so.
   await api('/api/config', {

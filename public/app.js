@@ -179,7 +179,7 @@ window.epubDrop = {
   reloadLibrary: () => loadLibrary(),
   reloadQueue: () => loadOutbox(),
   reloadRemovals: (count) => loadRemovals(count),
-  // The Read tab lists delivered items and opens them in the same previewer.
+  // The Library tab lists delivered items and opens them in the same previewer.
   reloadRead: () => window.epubDropRead?.load(),
   preview: (entry) => openViewer(entry),
   editorShown: () => window.epubDropEditor?.shown?.(),
@@ -1216,7 +1216,7 @@ async function loadOutbox() {
     renderResults();
 
     // Two other places depend on the queue: the badge on the tab bar, and the
-    // Read tab's list of what has been sent.
+    // Library tab's list of what has been sent.
     window.epubDropTabs?.setPending(results.filter((r) => !r.deliveredAt).length);
     window.epubDropRead?.load();
   } catch (err) {
