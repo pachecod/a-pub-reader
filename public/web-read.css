@@ -94,6 +94,22 @@ a { color: var(--accent); }
 .bar-button:hover { border-color: var(--accent); color: var(--accent); box-shadow: 0 2px 6px rgba(16, 24, 40, 0.12); }
 .bar-button:active { transform: translateY(1px); box-shadow: inset 0 1px 3px rgba(16, 24, 40, 0.2); }
 
+/* The quiet Sync Reader link after a note like "Goes over at the next sync". */
+.sync-link {
+  margin-left: 0.45rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sync-link::before { content: '· '; color: var(--muted); font-weight: 400; text-decoration: none; display: inline-block; margin-right: 0.3rem; }
+.sync-link:disabled { opacity: 0.6; cursor: default; }
+.sync-link[hidden] { display: none; }
+
 /* The On reader switch, as on the Library cards. */
 .reader-switch { display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0.35rem; }
 .switch {

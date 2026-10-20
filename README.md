@@ -335,7 +335,9 @@ From there, **Read as eBook** opens the device-shaped previewer described
 below (via `/?epub=<id>`).
 
 Each reading page also carries the item's **On reader** switch, next to Read
-as eBook, with the note under the title saying where it stands.
+as eBook, with the note under the title saying where it stands. While a change
+is waiting, a quiet **Sync Reader** link follows the note and runs the same
+sync as the app's button, over Wi-Fi to the saved reader address.
 
 The page is built from the EPUB's own chapters, which conversion strips of
 scripts. It is also served with a Content-Security-Policy that allows only the
