@@ -117,22 +117,19 @@
     read.style.fontWeight = '600';
     actions.appendChild(read);
 
-    const download = document.createElement('a');
-    download.href = `/out/${entry.id}`;
-    download.textContent = 'Download';
-    download.style.fontSize = '0.8rem';
-    actions.appendChild(download);
-
-    const forget = document.createElement('button');
-    forget.type = 'button';
-    forget.className = 'link danger-link';
-    forget.textContent = 'Forget';
-    forget.title = 'Remove it here, and optionally from the reader as well';
-    forget.addEventListener('click', () => askForget(entry));
-    actions.appendChild(forget);
-
     body.appendChild(actions);
     li.appendChild(body);
+
+    // Downloading lives on the reading page; the card itself only reads or
+    // forgets. Forget is a quiet × in the corner, asking before it acts.
+    const forget = document.createElement('button');
+    forget.type = 'button';
+    forget.className = 'card-forget';
+    forget.textContent = '×';
+    forget.title = 'Forget — remove it here, and optionally from the reader as well';
+    forget.setAttribute('aria-label', `Forget ${entry.title}`);
+    forget.addEventListener('click', () => askForget(entry));
+    li.appendChild(forget);
     return li;
   }
 
