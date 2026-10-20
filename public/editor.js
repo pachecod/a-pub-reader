@@ -649,15 +649,15 @@
   // ------------------------------------------------------------ build
 
   /**
-   * Confirm where the note went, because building and sending are separate
-   * steps and the button is on a different tab from the queue.
+   * Confirm where the note went, because building and syncing are separate
+   * steps and Sync Reader is on another tab.
    */
   function confirmQueued(title) {
     if (typeof el.queuedDialog?.showModal !== 'function') return;
     el.queuedBody.textContent =
-      `“${title}” is built and waiting on the Add/Remove tab. Send it from there ` +
-      `when the reader is connected and it will go to /A-pub Notes, along with ` +
-      `anything else you have queued.`;
+      `“${title}” is in your Library, under Notes, and can be read there now. ` +
+      `Its On reader switch is on, so Sync Reader puts it on the reader, in ` +
+      `/A-pub Notes, the next time the reader is connected.`;
     el.queuedDialog.showModal();
   }
 
@@ -673,7 +673,7 @@
 
     const result = await window.epubDrop?.convertDraft(draftId, title);
     if (result?.ok) {
-      setState('Added to the queue');
+      setState('Added to your Library');
       confirmQueued(title);
     } else if (result?.reason === 'busy') {
       setState('Still finishing the last one — try again in a moment', 'bad');
@@ -707,7 +707,7 @@
   el.queuedStay.addEventListener('click', () => el.queuedDialog.close());
   el.queuedGo.addEventListener('click', () => {
     el.queuedDialog.close();
-    window.epubDropTabs?.show('add');
+    window.epubDropTabs?.show('read');
   });
 
   el.reveal.addEventListener('click', () =>

@@ -165,23 +165,9 @@ try {
     body: JSON.stringify({ host: `http://${DEVICE_HOST}/`, folder: '/Articles/', includeImages: false }),
   });
   assert(saved.body.host === DEVICE_HOST, `config normalizes the host: ${saved.body.host}`);
-  // The folder names are fixed. Anything else — a hand-edited config, a stale
-  // value from an older version — is clamped to the books folder, so the app can
-  // never be pointed at a folder it does not manage.
-  assert(saved.body.folder === '/A-pub Books', `an unmanaged folder is clamped: ${saved.body.folder}`);
-
-  const picked = await api('/api/config', {
-    method: 'POST',
-    body: JSON.stringify({ host: DEVICE_HOST, folder: '/A-pub Feeds' }),
-  });
-  assert(picked.body.folder === '/A-pub Feeds', "one of the app's own folders is kept");
-
-  const listed = await api('/api/folders');
-  const paths = listed.body.folders.map((f) => f.path).join(',');
-  assert(
-    paths === '/A-pub Books,/A-pub Notes,/A-pub Feeds',
-    `the folder list the UI builds from is fixed: ${paths}`
-  );
+  // Where each item goes is decided by what it is, so the config no longer
+  // keeps a folder; one sent by an older page is simply dropped.
+  assert(!('folder' in saved.body), 'the config keeps no folder');
 
   console.log('\n== device status ==');
   const dev = await api(`/api/device?host=${encodeURIComponent(DEVICE_HOST)}`);
@@ -304,89 +290,6 @@ try {
     !noDevice.body.host || noDevice.body.host === '127.0.0.1:45999',
     'send did not silently fall back to a different device'
   );
-
-  console.log('\n== device browse ==');
-  const files = await api(`/api/device/files?host=${DEVICE_HOST}&path=/A-pub Books`);
-  assert(files.body.ok && files.body.entries.some((e) => e.isEpub), 'can list the device folder');
-
-  console.log('\n== library view and delete ==');
-  // Scope is read from saved config, which can only hold a managed folder.
-  await api('/api/config', {
-    method: 'POST',
-    body: JSON.stringify({ host: DEVICE_HOST, folder: '/A-pub Books', includeImages: false }),
-  });
-
-  // Files the app did not create, plus a subfolder and a sibling outside scope.
-  sd.set('/A-pub Books/Hand Copied.epub', { data: Buffer.from('x'.repeat(2048)) });
-  sd.set('/A-pub Books/Nested', { isDirectory: true });
-  sd.set('/A-pub Books/Nested/deep.epub', { data: Buffer.from('deep') });
-  sd.set('/A-pub Notes/outside.epub', { data: Buffer.from('outside') });
-  sd.set('/toplevel.epub', { data: Buffer.from('top') });
-
-  const lib = await api(`/api/library?host=${DEVICE_HOST}`);
-  assert(lib.body.ok && lib.body.folder === '/A-pub Books', 'library reads the configured folder');
-  assert(lib.body.canDelete === true, 'delete is enabled for a non-root folder');
-  const libNames = lib.body.entries.map((e) => e.name).sort();
-  assert(
-    libNames.join(',') === 'Framing the News.epub,Hand Copied.epub',
-    `library lists only plain files in the folder: ${libNames.join(', ')}`
-  );
-  assert(!libNames.includes('Nested'), 'subfolders are not listed as deletable');
-
-  // Paths that try to escape the managed folder.
-  const escapes = await api('/api/library/delete', {
-    method: 'POST',
-    body: JSON.stringify({
-      host: DEVICE_HOST,
-      names: ['../A-pub Notes/outside.epub', '../toplevel.epub', '/toplevel.epub', 'Nested', 'Nested/deep.epub', 'nope.epub'],
-    }),
-  });
-  assert(escapes.body.results.every((r) => !r.ok), 'every out-of-scope name is refused');
-  assert(
-    escapes.body.results.every((r) => /refusing to delete/i.test(r.error)),
-    'refusals say why'
-  );
-  assert(sd.has('/A-pub Notes/outside.epub'), 'a file in a sibling A-pub folder survived');
-  assert(sd.has('/toplevel.epub'), 'root file survived');
-  assert(sd.has('/A-pub Books/Nested'), 'subfolder survived');
-  assert(sd.has('/A-pub Books/Nested/deep.epub'), 'file inside the subfolder survived');
-
-  // A real delete of a file that is genuinely in the folder.
-  const del = await api('/api/library/delete', {
-    method: 'POST',
-    body: JSON.stringify({ host: DEVICE_HOST, names: ['Hand Copied.epub'] }),
-  });
-  assert(del.body.ok === true, 'deletes a file inside the managed folder');
-  assert(!sd.has('/A-pub Books/Hand Copied.epub'), 'file is gone from the device');
-  assert(sd.has('/A-pub Books/Framing the News.epub'), 'unselected file untouched');
-
-  const noSelection = await api('/api/library/delete', {
-    method: 'POST',
-    body: JSON.stringify({ host: DEVICE_HOST, names: [] }),
-  });
-  assert(noSelection.status === 400, 'empty selection is rejected');
-
-  // The SD-card root used to be selectable, which meant the delete controls
-  // could be aimed at the whole card. It is no longer a value the config accepts.
-  const rooted = await api('/api/config', {
-    method: 'POST',
-    body: JSON.stringify({ host: DEVICE_HOST, folder: '/', includeImages: false }),
-  });
-  assert(rooted.body.folder === '/A-pub Books', `the card root is clamped away: ${rooted.body.folder}`);
-
-  const rootLib = await api(`/api/library?host=${DEVICE_HOST}`);
-  assert(rootLib.body.folder === '/A-pub Books', 'the library cannot be scoped to the card root');
-  assert(rootLib.body.canDelete === true, 'delete stays enabled for the clamped folder');
-
-  const rootDel = await api('/api/library/delete', {
-    method: 'POST',
-    body: JSON.stringify({ host: DEVICE_HOST, names: ['toplevel.epub'] }),
-  });
-  assert(
-    rootDel.body.results.every((r) => !r.ok),
-    'a root file is still out of scope after the clamp'
-  );
-  assert(sd.has('/toplevel.epub'), 'root file still survived');
 
   console.log('\n== forgetting takes the reader\'s copy too ==');
   // The bug this covers: the Library tab and the device disagreed. Forgetting

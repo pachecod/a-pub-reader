@@ -208,7 +208,8 @@
     // The EPUB already on the device is left alone; say so rather than implying
     // this cleans up the reader.
     const note = feed.lastFilename
-      ? `\n\n"${feed.lastFilename}" stays on the reader — delete it there if you don't want it.`
+      ? `\n\nIts latest edition stays in your Library, and on the reader if it is there. ` +
+        'Switch that edition off in the Library and Sync Reader to take it off the reader.'
       : '';
     if (!confirm(`Stop following "${label}"?${note}`)) return;
     try {

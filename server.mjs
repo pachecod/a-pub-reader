@@ -20,7 +20,7 @@ import { PANEL, htmlToBlocks, renderBlocksToPages, renderPdfPages } from './lib/
 import { DraftStore } from './lib/drafts.mjs';
 import { AssetStore, normalizeForDevice } from './lib/assets.mjs';
 import { FeedStore, feedFilename } from './lib/feeds.mjs';
-import { BOOKS_FOLDER, FEED_FOLDER, FOLDERS, NOTES_FOLDER, isManagedFolder } from './lib/folders.mjs';
+import { BOOKS_FOLDER, FEED_FOLDER, NOTES_FOLDER } from './lib/folders.mjs';
 import { Outbox } from './lib/outbox.mjs';
 import { Removals } from './lib/removals.mjs';
 import { mediaTypeFor, readChapter, readEpub, readEpubFile } from './lib/epubread.mjs';
@@ -32,7 +32,6 @@ import { CATALOGUES, bookFilename, downloadBook, fetchCatalogue } from './lib/bo
 import {
   copyToVolume,
   deleteFromVolume,
-  listVolumeFiles,
   listVolumes,
   resolveVolume,
   targetDir,
@@ -46,7 +45,6 @@ import {
   ensureDir,
   getStatus,
   joinPath,
-  listFiles,
   normalizeHost,
   normalizePath,
   resolveHost,
@@ -69,7 +67,6 @@ const FETCH_TIMEOUT_MS = 30000;
 
 const DEFAULT_CONFIG = {
   host: DEFAULT_HOST,
-  folder: BOOKS_FOLDER,
   includeImages: true,
   // Fixed-layout ("comic book") output: each page becomes an image.
   imageMode: false,
@@ -104,12 +101,9 @@ const MIME = {
 async function readConfig() {
   try {
     const raw = JSON.parse(await fs.readFile(CONFIG_PATH, 'utf8'));
-    const config = { ...DEFAULT_CONFIG, ...raw };
-    // Clamp on the way in as well as on the way out: a file written by an older
-    // version, or edited by hand, would otherwise still aim the library view and
-    // its delete controls at a folder this app does not manage.
-    if (!isManagedFolder(normalizePath(config.folder))) config.folder = BOOKS_FOLDER;
-    else config.folder = normalizePath(config.folder);
+    // Earlier versions saved a folder for a device-browsing view that is gone;
+    // where each item goes is decided by what it is, so the value is dropped.
+    const { folder, ...config } = { ...DEFAULT_CONFIG, ...raw };
     return config;
   } catch {
     return { ...DEFAULT_CONFIG };
@@ -117,13 +111,9 @@ async function readConfig() {
 }
 
 async function writeConfig(patch) {
-  const next = { ...(await readConfig()), ...patch };
+  const { folder, ...rest } = patch || {};
+  const next = { ...(await readConfig()), ...rest };
   next.host = normalizeHost(next.host);
-  // Only ever one of the app's own folders: it selects what the library view
-  // browses and what the delete controls are scoped to, and a hand-typed value
-  // could point either at a folder the app never wrote.
-  const asked = normalizePath(next.folder);
-  next.folder = isManagedFolder(asked) ? asked : BOOKS_FOLDER;
   next.includeImages = Boolean(next.includeImages);
   next.imageMode = Boolean(next.imageMode);
   next.imageScale = clamp(Number(next.imageScale) || 1, 1, 3);
@@ -405,8 +395,6 @@ async function finish(article, item, warnings) {
   };
 }
 
-
-
 /**
  * Fold a delivered entry back into the app's state: mark it sent, replace the
  * edition it supersedes, and tell the feed which filename is now on the device.
@@ -578,8 +566,6 @@ const routes = {
 
   'POST /api/config': async (req) => json(200, await writeConfig(await body(req))),
 
-  'GET /api/folders': async () => json(200, { folders: FOLDERS }),
-
   'GET /api/device': async (req, url) => {
     const host = normalizeHost(url.searchParams.get('host') || (await readConfig()).host);
     try {
@@ -602,17 +588,6 @@ const routes = {
       })
     );
     return json(200, { devices: checked });
-  },
-
-  'GET /api/device/files': async (req, url) => {
-    const config = await readConfig();
-    const host = normalizeHost(url.searchParams.get('host') || config.host);
-    const dir = normalizePath(url.searchParams.get('path') || config.folder);
-    try {
-      return json(200, { ok: true, path: dir, entries: await listFiles(host, dir) });
-    } catch (err) {
-      return json(200, { ok: false, path: dir, error: friendlyDeviceError(err, host) });
-    }
   },
 
   // The pending queue, so the page can show it after a reload or a restart.
@@ -792,11 +767,6 @@ const routes = {
   },
 
   'GET /api/removals': async () => json(200, { removals: await removals.list() }),
-
-  // Changed your mind: leave those files on the reader after all.
-  'POST /api/removals/clear': async () => json(200, { cancelled: await removals.clear() }),
-
-  'POST /api/outbox/clear-delivered': async () => json(200, { removed: await outbox.clearDelivered() }),
 
   // ------------------------------------------------------------ find books
 
@@ -1111,131 +1081,6 @@ const routes = {
       results,
       removed,
     });
-  },
-
-  // Browse the managed folder only. Listing elsewhere is what /api/device/files
-  // is for; this is the view the delete UI acts on.
-  'GET /api/library': async (req, url) => {
-    const config = await readConfig();
-    const folder = normalizePath(config.folder);
-
-    // Offline destination: read the card directly instead of over Wi-Fi.
-    const volumePath = url.searchParams.get('volume');
-    if (volumePath) {
-      const volume = await resolveVolume(volumePath);
-      if (!volume) return json(200, { ok: false, folder, error: 'That drive is no longer mounted.' });
-      try {
-        return json(200, {
-          ok: true,
-          host: volume.name,
-          folder,
-          canDelete: folder !== '/' && volume.writable,
-          entries: await listVolumeFiles(volume, folder),
-        });
-      } catch (err) {
-        return json(200, { ok: false, folder, error: err.message });
-      }
-    }
-
-    try {
-      const { host } = await resolveHost(url.searchParams.get('host') || config.host);
-      const entries = await listFiles(host, folder);
-      return json(200, {
-        ok: true,
-        host,
-        folder,
-        canDelete: folder !== '/',
-        entries: entries
-          .filter((e) => !e.isDirectory)
-          .map((e) => ({ name: e.name, size: e.size, isEpub: e.isEpub })),
-      });
-    } catch (err) {
-      return json(200, { ok: false, folder, error: friendlyDeviceError(err, config.host) });
-    }
-  },
-
-  /**
-   * Delete files from the managed folder.
-   *
-   * Scope is enforced here, not in the browser: the request carries bare
-   * filenames, the folder comes from saved config, and each name must appear in
-   * a fresh device listing of that folder as a plain file. So nothing outside
-   * the folder is reachable, directories are never removed, and pointing the
-   * folder at the SD-card root disables deletion entirely rather than exposing
-   * the whole library.
-   */
-  'POST /api/library/delete': async (req) => {
-    const payload = await body(req);
-    const names = (Array.isArray(payload.names) ? payload.names : []).map(String);
-    if (!names.length) return json(400, { error: 'No files selected.' });
-
-    const config = await readConfig();
-    // Guaranteed to be one of the app's folders by writeConfig, so a delete can
-    // never be aimed at the SD-card root or at anything the app did not write.
-    const folder = normalizePath(config.folder);
-    if (!isManagedFolder(folder)) {
-      return json(400, { error: 'That is not a folder this app manages.' });
-    }
-
-    if (payload.volume) {
-      const volume = await resolveVolume(payload.volume);
-      if (!volume) return json(200, { ok: false, error: 'That drive is no longer mounted.', results: [] });
-      if (!volume.writable) {
-        return json(200, { ok: false, error: `${volume.name} is mounted read-only.`, results: [] });
-      }
-      const results = await deleteFromVolume(volume, folder, names);
-      return json(200, { ok: results.every((r) => r.ok), host: volume.name, folder, results });
-    }
-
-    let host;
-    try {
-      ({ host } = await resolveHost(payload.host || config.host));
-    } catch (err) {
-      return json(200, { ok: false, error: err.message, results: [] });
-    }
-
-    let allowed;
-    try {
-      allowed = await deletableNames(host, folder);
-    } catch (err) {
-      return json(200, { ok: false, error: `Could not read ${folder}: ${friendlyDeviceError(err, host)}`, results: [] });
-    }
-
-    const results = [];
-    const paths = [];
-    for (const name of names) {
-      if (!allowed.has(name)) {
-        results.push({
-          name,
-          ok: false,
-          error: `Not a file in ${folder} — refusing to delete.`,
-        });
-        continue;
-      }
-      paths.push(joinPath(folder, name));
-    }
-
-    if (paths.length) {
-      try {
-        await deleteFiles(host, paths);
-        // Confirm against the device rather than trusting the response text.
-        const remaining = await deletableNames(host, folder);
-        for (const path of paths) {
-          const name = path.slice(folder.length + 1);
-          results.push(
-            remaining.has(name)
-              ? { name, ok: false, error: 'Device still lists this file.' }
-              : { name, ok: true }
-          );
-        }
-      } catch (err) {
-        for (const path of paths) {
-          results.push({ name: path.slice(folder.length + 1), ok: false, error: err.message });
-        }
-      }
-    }
-
-    return json(200, { ok: results.every((r) => r.ok), host, folder, results });
   },
 
   'POST /api/convert': async (req) => {
@@ -1624,7 +1469,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '127.0.0.1', async () => {
   const config = await readConfig();
-  console.log(`\n  A-pub reader  →  http://localhost:${PORT}`);
-  console.log(`  reader: ${config.host}   folder: ${config.folder}`);
+  console.log(`\n  A-Pub Reader  →  http://localhost:${PORT}`);
+  console.log(`  reader: ${config.host}`);
   console.log('  On the reader: open File Transfer and join Wi-Fi.\n');
 });

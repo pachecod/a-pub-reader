@@ -257,6 +257,6 @@
   el.refresh.addEventListener('click', () => {
     if (!window.epubDropFeeds?.refreshAll()) load();
   });
-  window.epubDropRead = { load };
+  window.epubDropRead = { load, askForget };
   load();
 })();

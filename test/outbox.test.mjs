@@ -114,20 +114,6 @@ assert(
 );
 assert((await outbox.remove(withPages.id)) === false, 'removing twice reports false');
 
-console.log('\n== clearing what has been sent ==');
-const beforeClear = await outbox.list();
-const deliveredCount = beforeClear.filter((i) => i.deliveredAt).length;
-const removed = await outbox.clearDelivered();
-assert(removed === deliveredCount, `clear removed exactly the delivered entries (${removed})`);
-
-const remaining = await outbox.list();
-assert(remaining.every((i) => !i.deliveredAt), 'only unsent entries remain');
-assert(remaining.some((i) => i.id === b.id), 'the unsent entry is untouched — clearing must not lose queued work');
-assert(
-  await fs.access(b.diskPath).then(() => true).catch(() => false),
-  'and its file is still on disk'
-);
-
 console.log('\n== updates ==');
 const patched = await outbox.update(b.id, { folder: '/Elsewhere' });
 assert(patched.folder === '/Elsewhere', 'entries can be patched');

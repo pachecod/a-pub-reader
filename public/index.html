@@ -23,7 +23,7 @@
   </nav>
   <span class="menubar-spacer"></span>
   <button type="button" id="pending-badge" class="pending-badge" hidden
-          title="Waiting to be sent — click to open Add">0 queued</button>
+          title="Changes waiting for Sync Reader — click to open the Library">0 to sync</button>
 </header>
 
 <main>
@@ -72,9 +72,9 @@
       </ul>
 
       <p class="onboard-note">
-        Have an Xteink reader? Converting works offline. <strong>Sending</strong> needs the reader awake with
-        <strong>File Transfer</strong> open on its screen — so the usual order is add
-        everything first, then connect and push the queue in one go.
+        Have an Xteink reader? Converting works offline. <strong>Sync Reader</strong> needs the
+        reader awake with <strong>File Transfer</strong> open on its screen — so the usual
+        order is add everything first, then connect and sync once.
       </p>
     </section>
 
@@ -137,27 +137,6 @@
       </aside>
     </div>
 
-    <!-- The device's own folder listing. Replaced in the Library by each card's
-         On reader switch, and kept hidden only because its folder picker still
-         holds the books-folder setting. -->
-    <section id="library-section" hidden>
-    <div class="row-between">
-    <h2>On the reader <span id="library-folder" class="muted"></span></h2>
-    <div class="row-tight">
-    <label class="field inline">
-    Folder
-    <select id="folder" aria-label="Which reader folder to show"></select>
-    </label>
-    <button id="refresh-library" type="button" class="link">Refresh</button>
-    </div>
-    </div>
-    <ul id="library" class="list"></ul>
-    <div class="actions">
-    <label class="check"><input id="library-all" type="checkbox"> Select all</label>
-    <button id="delete-library" type="button" class="danger" disabled>Delete selected</button>
-    </div>
-    <p id="library-status" class="status"></p>
-    </section>
   </div>
 
   <div class="panel" id="tab-add" role="tabpanel" aria-labelledby="tabbtn-add" hidden>
@@ -285,8 +264,7 @@
         </section>
         <section id="results-section">
         <div class="row-between">
-        <h2>Queued to send <span id="results-count" class="muted"></span></h2>
-        <button id="clear-results" type="button" class="link">Clear</button>
+        <h2>Sync with reader <span id="results-count" class="muted"></span></h2>
         </div>
         <!-- Where and how to sync sit above the list, so they are in reach
              however long it gets; a second Sync Reader closes the list. -->
@@ -307,8 +285,8 @@
         <p id="removal-note" class="muted removal-note" hidden></p>
         <ul id="results" class="list"></ul>
         <p id="results-empty" class="muted empty-note">
-        Nothing queued. Convert something on the left — dropped files, a URL, a
-        draft or a feed refresh all land here, and stay until they reach the reader.
+        Nothing here yet. Convert something on the left — dropped files, a URL, a
+        draft or a feed refresh all land here, each with its On reader switch.
         </p>
         <div class="actions sync-bottom">
         <button id="send-bottom" type="button" class="primary">Sync Reader</button>
@@ -441,9 +419,9 @@
     </p>
     </section>
     <p class="muted empty-note" id="write-hint">
-      Building a draft puts it in the send queue. Open <strong>Add/Remove</strong> to push it
-      to the reader, or use <strong>⌘↩</strong> here to build. Notes go to their own
-      <strong>/A-pub Notes</strong> folder on the reader.
+      <strong>Add</strong> (or <strong>⌘↩</strong>) builds the draft into a note in your
+      <strong>Library</strong>, where you can read it right away. <strong>Sync Reader</strong>
+      puts it on the reader, in its own <strong>/A-pub Notes</strong> folder.
     </p>
   </div>
 
@@ -476,11 +454,11 @@
   </dialog>
 
   <dialog id="queued-dialog" class="dialog">
-    <h2 id="queued-title">Added to the queue</h2>
+    <h2 id="queued-title">Added to your Library</h2>
     <p id="queued-body" class="muted"></p>
     <div class="dialog-actions">
       <button id="queued-stay" type="button" class="secondary" value="stay">Keep writing</button>
-      <button id="queued-go" type="button" class="primary" value="go">Open Add/Remove</button>
+      <button id="queued-go" type="button" class="primary" value="go">Open Library</button>
     </div>
   </dialog>
 

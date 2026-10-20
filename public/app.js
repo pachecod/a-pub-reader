@@ -19,9 +19,7 @@ const el = {
   resultsSection: $('results-section'),
   results: $('results'),
   resultsCount: $('results-count'),
-  clearResults: $('clear-results'),
   resultsEmpty: $('results-empty'),
-  folder: $('folder'),
   host: $('host'),
   send: $('send'),
   removalNote: $('removal-note'),
@@ -38,14 +36,6 @@ const el = {
   useHotspot: $('use-hotspot'),
   destination: $('destination'),
   hostField: $('host-field'),
-  librarySection: $('library-section'),
-  library: $('library'),
-  libraryFolder: $('library-folder'),
-  librarySection: $('library-section'),
-  libraryStatus: $('library-status'),
-  libraryAll: $('library-all'),
-  refreshLibrary: $('refresh-library'),
-  deleteLibrary: $('delete-library'),
   imageMode: $('image-mode'),
   imageOptions: $('image-options'),
   imageScale: $('image-scale'),
@@ -79,18 +69,15 @@ const el = {
 let queue = [];
 /** Converted EPUBs from the server, newest last. */
 let results = [];
-/** What the reader currently holds in the managed folder. */
-let library = [];
-let libraryCanDelete = false;
 /**
- * Per-item send outcomes, keyed by queue id.
+ * Per-item send failures, keyed by queue id.
  *
  * Kept outside `results` because a send is followed by re-reading the queue
  * from the server, which rebuilds every row — so failure messages were being
  * wiped a moment after being set, leaving only a summary count with no way to
  * tell which item had a problem.
  */
-const sendOutcomes = new Map();
+const sendFailures = new Map();
 /** Mounted drives that might be the reader's card. */
 let volumes = [];
 let busy = false;
@@ -181,7 +168,6 @@ function convertDraft(id, title) {
 
 window.epubDrop = {
   convertDraft,
-  reloadLibrary: () => loadLibrary(),
   reloadQueue: () => loadOutbox(),
   reloadRemovals: (count) => loadRemovals(count),
   // The Library tab lists delivered items and opens them in the same previewer.
@@ -360,7 +346,13 @@ function renderResults(failures = []) {
 
     const title = document.createElement('div');
     title.className = 'item-title';
-    title.textContent = r.title;
+    // As on the Library card, the title opens the reading page, which also
+    // has Read as eBook and Download eBook.
+    const link = document.createElement('a');
+    link.href = `/read/${r.id}`;
+    link.className = 'card-title-link';
+    link.textContent = r.title;
+    title.appendChild(link);
     body.appendChild(title);
 
     const meta = document.createElement('div');
@@ -389,28 +381,6 @@ function renderResults(failures = []) {
     meta.append(bits.join(' · '));
     body.appendChild(meta);
 
-    const linkWrap = document.createElement('div');
-    linkWrap.style.marginTop = '0.25rem';
-    linkWrap.style.display = 'flex';
-    linkWrap.style.gap = '0.75rem';
-
-    // Every queued item is previewable, whatever produced it.
-    const preview = document.createElement('button');
-    preview.type = 'button';
-    preview.className = 'link';
-    preview.textContent =
-      r.mode === 'images'
-        ? `Preview ${r.pageCount} page${r.pageCount === 1 ? '' : 's'}`
-        : `Preview ${r.chapters || ''} ${r.chapters === 1 ? 'chapter' : 'chapters'}`.replace(/ +/g, ' ').trim();
-    preview.addEventListener('click', () => openViewer(r));
-    linkWrap.appendChild(preview);
-
-    const link = document.createElement('a');
-    link.href = `/out/${r.id}`;
-    link.textContent = 'Download locally';
-    link.style.fontSize = '0.8rem';
-    linkWrap.appendChild(link);
-    body.appendChild(linkWrap);
 
     if (r.warnings?.length) {
       const warn = document.createElement('div');
@@ -420,19 +390,21 @@ function renderResults(failures = []) {
     }
     // The same On reader switch as the Library card, so the two always agree.
     body.appendChild(readerSwitch(r));
-    if (r.sendState === 'bad') {
+    if (r.sendError) {
       const bad = document.createElement('div');
       bad.className = 'item-err';
-      bad.textContent = r.sendMessage;
+      bad.textContent = r.sendError;
       body.appendChild(bad);
     }
 
     const remove = document.createElement('button');
     remove.className = 'remove';
     remove.type = 'button';
-    remove.title = 'Remove from the queue';
+    remove.title = 'Forget — remove it here, and optionally from the reader as well';
+    remove.setAttribute('aria-label', `Forget ${r.title}`);
     remove.textContent = '×';
-    remove.addEventListener('click', () => removeFromQueue(r));
+    // The same Forget dialog as the Library's ×, so both ask before acting.
+    remove.addEventListener('click', () => window.epubDropRead?.askForget(r));
 
     li.append(body, remove);
     nodes.push(li);
@@ -474,7 +446,10 @@ function toSync() {
 const syncLabel = () => (el.destination.value !== 'wifi' ? 'Sync drive' : 'Sync Reader');
 
 function updateSyncButtons() {
-  const idle = !toSync().length && !pendingRemovals.length;
+  const changes = toSync().length + pendingRemovals.length;
+  const idle = changes === 0;
+  // The menu bar badge counts the same changes: items to send and to remove.
+  window.epubDropTabs?.setPending(changes);
   for (const button of [el.send, el.sendBottom, el.syncLibrary]) {
     if (button) button.disabled = busy || idle;
   }
@@ -562,11 +537,11 @@ async function send(trigger = el.send) {
       return;
     }
 
+    // Only failures are remembered: a sent item's switch note already says it
+    // is on the reader, and a failure is what tells you which row to look at.
     for (const outcome of payload.results) {
-      sendOutcomes.set(outcome.id, {
-        state: outcome.ok ? 'ok' : 'bad',
-        message: outcome.ok ? outcome.message : outcome.error,
-      });
+      if (outcome.ok) sendFailures.delete(outcome.id);
+      else sendFailures.set(outcome.id, outcome.error);
     }
 
     const failures = payload.results.filter((r) => !r.ok);
@@ -591,10 +566,8 @@ async function send(trigger = el.send) {
 
     saveConfig();
     checkDevice();
-    // Re-read both: the queue owns delivered state, and the library shows what
-    // just landed.
+    // The queue owns delivered state; re-reading it redraws the Library too.
     await loadOutbox();
-    loadLibrary();
   } catch (err) {
     setStatus(err.message, 'bad');
   } finally {
@@ -708,8 +681,6 @@ let readerWidth = 'ebook';
 // pages, and scroll is something you switch to for that reading.
 try {
   readerWidth = localStorage.getItem('apub.readerWidth') === 'full' ? 'full' : 'ebook';
-  // Earlier versions remembered scroll view too; drop that so it stops winning.
-  localStorage.removeItem('apub.readerMode');
 } catch {
   /* private window, or storage blocked — the default is fine */
 }
@@ -1264,7 +1235,7 @@ function renderRemovals() {
   if (n) {
     const names = pendingRemovals.slice(0, 3).map((r) => r.title || r.filename);
     el.removalNote.textContent =
-      `${n} file${n === 1 ? '' : 's'} will be removed from the reader on the next send: ` +
+      `${n} file${n === 1 ? '' : 's'} will be removed from the reader on the next sync: ` +
       `${names.join(', ')}${n > names.length ? `, and ${n - names.length} more` : ''}.`;
   }
   // A sync that only deletes is still worth doing, so Send stays available.
@@ -1290,29 +1261,14 @@ async function loadOutbox() {
       deliveredTo: entry.deliveredTo,
       warnings: [],
       onReader: entry.onReader !== false,
-      // A recorded outcome wins over the stored state: it is the newer news,
-      // and a failure message is what tells you which row to look at.
-      sendState: sendOutcomes.get(entry.id)?.state ?? (entry.deliveredAt ? 'ok' : undefined),
-      sendMessage:
-        sendOutcomes.get(entry.id)?.message ??
-        (entry.deliveredAt ? `Sent to ${entry.deliveredTo || 'the reader'}` : undefined),
+      sendError: entry.deliveredAt ? undefined : sendFailures.get(entry.id),
     }));
     renderResults();
 
     // Two other places depend on the queue: the badge on the tab bar, and the
     // Library tab's list of what has been sent.
-    window.epubDropTabs?.setPending(toSync().length);
     updateSyncButtons();
     window.epubDropRead?.load();
-  } catch (err) {
-    setStatus(err.message, 'bad');
-  }
-}
-
-async function removeFromQueue(result) {
-  try {
-    await api('/api/outbox/remove', { method: 'POST', body: JSON.stringify({ id: result.id }) });
-    await loadOutbox();
   } catch (err) {
     setStatus(err.message, 'bad');
   }
@@ -1364,165 +1320,6 @@ function syncDestination() {
   }
 }
 
-// ---------------------------------------------------------------- library
-
-async function loadLibrary() {
-  // Hidden in favour of the Library's On reader switches; listing the device
-  // for a section nobody sees would only probe it for nothing.
-  if (el.librarySection?.hidden) return;
-  el.refreshLibrary.disabled = true;
-  try {
-    const data = await api(
-      el.destination.value === 'wifi'
-        ? `/api/library?host=${encodeURIComponent(el.host.value.trim())}`
-        : `/api/library?volume=${encodeURIComponent(el.destination.value)}`
-    );
-    el.libraryFolder.textContent = data.folder ? `· ${data.folder}` : '';
-
-    if (!data.ok) {
-      library = [];
-      libraryCanDelete = false;
-      renderLibrary();
-      setLibraryStatus(data.error || 'Reader not reachable.', 'bad');
-      return;
-    }
-
-    libraryCanDelete = data.canDelete;
-    library = data.entries.map((e) => ({ ...e, selected: false }));
-    renderLibrary();
-    setLibraryStatus(
-      library.length
-        ? `${library.length} file${library.length === 1 ? '' : 's'} in ${data.folder}`
-        : `${data.folder} is empty.`
-    );
-    if (!data.canDelete) {
-      setLibraryStatus(
-        'Deleting is disabled while the reader folder is the SD-card root. Set a folder such as /A-pub Books.',
-        'bad'
-      );
-    }
-  } catch (err) {
-    setLibraryStatus(err.message, 'bad');
-  } finally {
-    el.refreshLibrary.disabled = false;
-  }
-}
-
-function renderLibrary() {
-  const anySelected = library.some((f) => f.selected);
-  el.deleteLibrary.disabled = busy || !anySelected || !libraryCanDelete;
-  el.libraryAll.checked = library.length > 0 && library.every((f) => f.selected);
-  el.libraryAll.disabled = !library.length || !libraryCanDelete;
-
-  if (!library.length) {
-    el.library.replaceChildren();
-    return;
-  }
-
-  el.library.replaceChildren(
-    ...library.map((file) => {
-      const li = document.createElement('li');
-      li.className = 'item';
-
-      const check = document.createElement('input');
-      check.type = 'checkbox';
-      check.checked = file.selected;
-      check.disabled = !libraryCanDelete;
-      check.addEventListener('change', () => {
-        file.selected = check.checked;
-        renderLibrary();
-      });
-
-      const body = document.createElement('div');
-      body.className = 'item-body';
-
-      const title = document.createElement('div');
-      title.className = 'item-title';
-      title.textContent = file.name;
-      body.appendChild(title);
-
-      const meta = document.createElement('div');
-      meta.className = 'item-meta';
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = file.isEpub ? 'EPUB' : 'file';
-      meta.appendChild(badge);
-      meta.append(formatBytes(file.size));
-      body.appendChild(meta);
-
-      if (file.deleteError) {
-        const err = document.createElement('div');
-        err.className = 'item-err';
-        err.textContent = file.deleteError;
-        body.appendChild(err);
-      }
-
-      li.append(check, body);
-      return li;
-    })
-  );
-}
-
-async function deleteSelected() {
-  const selected = library.filter((f) => f.selected);
-  if (!selected.length || busy) return;
-
-  const names = selected.map((f) => f.name);
-  const preview = names.slice(0, 5).join('\n  ');
-  const more = names.length > 5 ? `\n  …and ${names.length - 5} more` : '';
-  // Deleting from the SD card cannot be undone, so make the list explicit.
-  if (
-    !confirm(
-      `Delete ${names.length} file${names.length === 1 ? '' : 's'} from the reader?\n\n  ${preview}${more}\n\nThis cannot be undone.`
-    )
-  ) {
-    return;
-  }
-
-  setBusy(true, el.deleteLibrary, 'Deleting…');
-  setLibraryStatus('');
-  try {
-    const payload = await api('/api/library/delete', {
-      method: 'POST',
-      body: JSON.stringify(
-        el.destination.value === 'wifi'
-          ? { names, host: el.host.value.trim() }
-          : { names, volume: el.destination.value }
-      ),
-    });
-
-    if (payload.error && !payload.results?.length) {
-      setLibraryStatus(payload.error, 'bad');
-      return;
-    }
-
-    const failed = payload.results.filter((r) => !r.ok);
-    for (const failure of failed) {
-      const match = library.find((f) => f.name === failure.name);
-      if (match) match.deleteError = failure.error;
-    }
-
-    const okCount = payload.results.length - failed.length;
-    setLibraryStatus(
-      failed.length
-        ? `Deleted ${okCount}, ${failed.length} failed.`
-        : `Deleted ${okCount} file${okCount === 1 ? '' : 's'} from ${payload.folder}.`,
-      failed.length ? 'bad' : 'ok'
-    );
-
-    await loadLibrary();
-  } catch (err) {
-    setLibraryStatus(err.message, 'bad');
-  } finally {
-    setBusy(false, el.deleteLibrary, 'Delete selected');
-  }
-}
-
-function setLibraryStatus(text, kind = '') {
-  el.libraryStatus.textContent = text;
-  el.libraryStatus.className = `status ${kind}`;
-}
-
 // ---------------------------------------------------------------- device
 
 async function checkDevice() {
@@ -1557,7 +1354,6 @@ async function findDevice() {
     el.host.value = live.address;
     await saveConfig();
     await checkDevice();
-    await loadLibrary();
   } catch (err) {
     setDevice('off', err.message);
   } finally {
@@ -1585,22 +1381,10 @@ el.deviceInfo.addEventListener('click', () => {
 
 // ---------------------------------------------------------------- config
 
-async function loadFolders() {
-  try {
-    const { folders } = await api('/api/folders');
-    el.folder.replaceChildren(...folders.map((f) => new Option(`${f.label} — ${f.path}`, f.path)));
-  } catch {
-    /* the folder the config reports is still selectable below */
-  }
-}
-
 async function loadConfig() {
   try {
     const config = await api('/api/config');
     el.host.value = config.host || 'crosspoint.local';
-    // A value the picker doesn't offer would select nothing; fall back to Books.
-    el.folder.value = config.folder || '/A-pub Books';
-    if (!el.folder.value) el.folder.value = '/A-pub Books';
     el.includeImages.checked = config.includeImages !== false;
     el.imageMode.checked = Boolean(config.imageMode);
     el.imageScale.value = String(config.imageScale || 2);
@@ -1629,7 +1413,6 @@ async function saveConfig() {
       method: 'POST',
       body: JSON.stringify({
         host: el.host.value.trim(),
-        folder: el.folder.value,
         includeImages: el.includeImages.checked,
         imageMode: el.imageMode.checked,
         imageScale: Number(el.imageScale.value),
@@ -1648,7 +1431,6 @@ function setBusy(state, button, label) {
   busy = state;
   el.convert.disabled = busy || queue.length === 0;
   updateSyncButtons();
-  el.deleteLibrary.disabled = busy || !libraryCanDelete || !library.some((f) => f.selected);
   if (state) {
     button.disabled = true;
     button.innerHTML = `<span class="spin"></span>${label}`;
@@ -1727,18 +1509,6 @@ el.clearQueue.addEventListener('click', () => {
   queue = [];
   renderQueue();
 });
-el.clearResults.addEventListener('click', async () => {
-  // Only drop what has already gone over: clearing the view would otherwise
-  // hide files that are still waiting to be sent.
-  try {
-    const { removed } = await api('/api/outbox/clear-delivered', { method: 'POST' });
-    sendOutcomes.clear();
-    await loadOutbox();
-    setStatus(removed ? `Cleared ${removed} already sent.` : 'Nothing sent yet to clear.');
-  } catch (err) {
-    setStatus(err.message, 'bad');
-  }
-});
 el.convert.addEventListener('click', convert);
 el.send.addEventListener('click', () => send(el.send));
 el.syncLibrary?.addEventListener('click', () => send(el.syncLibrary));
@@ -1752,16 +1522,11 @@ el.useHotspot.addEventListener('click', async () => {
   el.host.value = '192.168.4.1';
   await saveConfig();
   await checkDevice();
-  await loadLibrary();
 });
 el.host.addEventListener('change', () => {
   saveConfig();
   checkDevice();
-  loadLibrary();
 });
-// The folder has to be saved before the library reloads: the server reads the
-// scope from saved config, not from the request.
-el.folder.addEventListener('change', () => saveConfig().then(loadLibrary));
 el.includeImages.addEventListener('change', saveConfig);
 el.imageMode.addEventListener('change', () => {
   syncImageMode();
@@ -1771,26 +1536,13 @@ for (const control of [el.imageScale, el.imageSplit, el.imageFont]) {
   control.addEventListener('change', saveConfig);
 }
 
-el.destination.addEventListener('change', () => {
-  syncDestination();
-  loadLibrary();
-});
-el.refreshLibrary.addEventListener('click', () => {
-  // Re-scan drives too: the card may have been plugged in since page load.
-  loadVolumes().then(loadLibrary);
-});
-el.deleteLibrary.addEventListener('click', deleteSelected);
-el.libraryAll.addEventListener('change', () => {
-  for (const file of library) file.selected = el.libraryAll.checked;
-  renderLibrary();
-});
+el.destination.addEventListener('change', syncDestination);
 
-loadFolders().then(loadConfig).then(async () => {
+loadConfig().then(async () => {
   // The queue is local state, so show it immediately. Chaining it behind the
   // device probe meant a six-second wait whenever the reader was switched off —
   // exactly when you most want to see what's waiting to go.
   loadOutbox();
   loadRemovals();
   await loadVolumes(); // also picks the destination, which probes the reader
-  loadLibrary();
 });

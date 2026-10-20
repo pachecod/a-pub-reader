@@ -137,8 +137,8 @@ Markdown is what's stored, because it survives round-tripping through a
 rich-text surface and maps onto the small tag vocabulary the reader renders
 properly. Drafts autosave to `drafts/*.json`; ⌘S saves, ⌘↩ builds.
 
-A built draft goes to **`/A-pub Notes`** on the reader rather than following the
-**Send via** folder — your own writing is a different kind of thing from a book
+A built draft goes to **`/A-pub Notes`** on the reader rather than the books
+folder — your own writing is a different kind of thing from a book
 or a downloaded reading, and keeping it in its own folder means it doesn't get
 lost among them.
 
@@ -186,8 +186,8 @@ Details that matter in practice:
 - **Chapter counts come from the book.** The downloaded EPUB is opened and its
   spine counted, so the queue and the preview show the real structure.
 
-Books follow the **Send via** controls like anything else, so they land in the
-ordinary folder rather than the feeds folder. Pointing this at an article feed
+Books go to **`/A-pub Books`**, the ordinary folder, rather than the feeds
+folder. Pointing this at an article feed
 reports how many entries had no EPUB and suggests adding it under **Feeds**
 instead.
 
@@ -197,26 +197,24 @@ The window is two columns: **Add content** on the left, **Push to reader** on
 the right. Everything that produces an EPUB is on the left; everything that
 moves one onto the device is on the right.
 
-Anything converted goes into a queue that lives on disk, not in the page, and
-stays there until it has been sent. That is what makes the normal sequence
-work: the reader is usually *not* connected at the moment you build something.
-You refresh feeds and convert readings on your own Wi-Fi, then join the
-reader's hotspot — which has no internet — and push everything at once.
+Anything converted is kept on disk, not in the page, so it survives a page
+reload, a network switch and a restart of the app. That is what makes the
+normal sequence work: the reader is usually *not* connected at the moment you
+build something. You refresh feeds and convert readings on your own Wi-Fi, then
+join the reader's hotspot — which has no internet — and sync once.
 
-Because the queue is on disk it survives a page reload, a network switch and a
-restart of the app. A dropped PDF, a pasted URL, a draft and a feed refresh all
-land in the same list and look the same there, tagged with where they came from
-and where they are going.
+**Sync with reader** on Add/Remove lists everything, with the same **On reader**
+switch as the Library card and, above it, **Send via**, **Reader address** and
+**Sync Reader** (repeated under a list that has items). A dropped PDF, a pasted
+URL, a draft and a feed refresh all land there, tagged with where they came
+from and where they are going; like the Library, only a feed's newest edition is
+listed. A row's title opens its reading page, and **×** forgets it, asking
+first, as in the Library.
 
-Sent items stay visible, dimmed, showing which device they went to — useful
-when a transfer half-fails, or when you want the same book on a second reader.
-**Clear** removes only what has already been sent, never something still
-waiting. **×** on a row drops it from the queue and deletes its files.
-
-An entry carries its own destination folder, so a feed edition goes to
-`/A-pub Feeds` even when **Send via** is pointed elsewhere, and it carries the
-filename of the edition it replaces — so a send that happens hours after the
-build still removes the right old file.
+Where each item goes on the reader is decided by what it is: books to
+`/A-pub Books`, notes to `/A-pub Notes` and feed editions to `/A-pub Feeds`.
+A feed edition also carries the filename of the edition it replaces, so a sync
+that happens hours after the build still removes the right old file.
 
 ## RSS feeds
 
@@ -255,8 +253,9 @@ the feed’s own text and is marked *summary only* in the book rather than being
 dropped.
 
 
-Removing a feed stops following it and leaves any EPUB already on the reader
-alone; the confirmation says so, and you can delete it from **On the reader**.
+Removing a feed stops following it. Its latest edition stays in the Library
+(and on the reader, if it is there); switch that edition off and Sync Reader to
+take it off the reader. The confirmation says so.
 
 Parsing covers RSS 2.0, Atom and RSS 1.0/RDF, prefers `content:encoded` over
 `description`, reads `dc:creator` and Atom `author/name`, and decodes entities a
@@ -300,7 +299,7 @@ cannot reflow or be resized on the reader.
 - **Text size** — applies to web pages and drafts, which have no page geometry
   to preserve and so are typeset directly at the panel size.
 
-Hit **Preview** on a queued item to page through exactly what the reader will
+Use **Read as eBook** on an item's reading page to page through exactly what the reader will
 display before sending anything.
 
 ### Why everything ships as JPEG
@@ -346,8 +345,9 @@ book or another site, and no forms or `<base>` redirects.
 
 ## Previewing
 
-Every item in the queue has a **Preview** link, whatever produced it — a
-dropped PDF, a saved page, a pasted URL, a draft or a feed edition.
+Every item can be previewed as the reader will show it, whatever produced it —
+a dropped PDF, a saved page, a pasted URL, a draft or a feed edition — from
+**Read as eBook** on its reading page.
 
 The preview reads the **built EPUB**, not the thing it was made from. That
 distinction matters: the editor's Preview tab renders your markdown, which is
@@ -424,15 +424,6 @@ one waiting to replace it — and stays switched across new editions; like the
 Library, the queue shows only a feed's newest edition. A sync with
 nothing to upload still carries out any removals, so switching items off and
 syncing is enough to clear them from the device.
-
-The older **On the reader** folder listing is hidden in favour of the switches
-(its folder picker still holds the books-folder setting). Its server routes
-list the managed folder and can delete from it.
-Scope is enforced on the server, not in the browser: requests carry bare
-filenames, the folder comes from saved config, and each name must appear in a
-fresh device listing of that folder as a plain file. Nothing outside the folder
-is reachable, directories are never removed, and pointing the folder at the
-SD-card root disables deletion entirely rather than exposing your whole library.
 
 ## Removing everything
 

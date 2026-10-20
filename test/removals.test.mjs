@@ -81,11 +81,6 @@ assert(
   'a file that was never queued reports nothing to do'
 );
 
-console.log('\n== cancelling ==');
-const cancelled = await reopened.clear();
-assert(cancelled === 2, `clear reports how many were cancelled: ${cancelled}`);
-assert((await reopened.list()).length === 0, 'nothing is left queued');
-
 console.log('\n== a damaged index ==');
 await fs.writeFile(file, 'not json at all');
 assert((await new Removals(file).list()).length === 0, 'unreadable index reads as empty');

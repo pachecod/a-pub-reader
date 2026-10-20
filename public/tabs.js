@@ -90,16 +90,16 @@
     }
   });
 
-  badge.addEventListener('click', () => show('add'));
+  badge.addEventListener('click', () => show('read'));
 
-  /** Called by app.js whenever the queue changes. */
+  /** Called by app.js with how many changes the next Sync Reader will make. */
   function setPending(count) {
     badge.hidden = count === 0;
-    badge.textContent = `${count} queued`;
+    badge.textContent = `${count} to sync`;
     badge.title =
       count === 1
-        ? '1 file waiting to be sent — click to open Add/Remove'
-        : `${count} files waiting to be sent — click to open Add/Remove`;
+        ? '1 change waiting for Sync Reader — click to open the Library'
+        : `${count} changes waiting for Sync Reader — click to open the Library`;
   }
 
   window.epubDropTabs = { show, setPending, current: () => current };
