@@ -34,27 +34,46 @@ body {
 
 a { color: var(--accent); }
 
+/* The same menu bar as the main page: logo and name, the three sections with
+   Read underlined, and this book's own actions on the right. */
 .bar {
   position: sticky;
   top: 0;
   z-index: 2;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.7rem 1rem;
+  align-items: stretch;
+  gap: 1.75rem;
+  height: 56px;
+  padding: 0 1.5rem;
   background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  box-shadow: 0 1px 0 var(--line), 0 2px 10px rgba(16, 24, 40, 0.06);
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 .bar a { text-decoration: none; }
-.bar a:hover { text-decoration: underline; }
-.bar { height: 52px; padding-top: 0; padding-bottom: 0; }
-.brand { display: flex; align-items: center; gap: 0.55rem; color: var(--text) !important; font-weight: 600; font-size: 15px; }
+.brand { display: flex; align-items: center; gap: 0.6rem; color: var(--text) !important; font-weight: 700; font-size: 1.05rem; flex: none; }
 .brand img { display: block; }
-.brand:hover { text-decoration: none !important; }
-@media (max-width: 520px) { .brand span { display: none; } }
-.bar-actions { display: flex; gap: 1rem; }
+.menu { display: flex; align-items: stretch; gap: 0.25rem; }
+.menu a {
+  display: flex;
+  align-items: center;
+  padding: 0 0.85rem;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+.menu a:hover { color: var(--text); border-bottom-color: var(--line); }
+.menu a[aria-current="page"] { color: var(--accent); border-bottom: 3px solid var(--accent); font-weight: 600; }
+.bar-actions { display: flex; align-items: center; gap: 1rem; margin-left: auto; font-size: 14px; }
+.bar-actions a:hover { text-decoration: underline; }
+
+/* Narrow screens: the name gives way to the logo, and everything closes up. */
+@media (max-width: 640px) {
+  .bar { gap: 0.6rem; padding: 0 0.75rem; }
+  .brand span { display: none; }
+  .menu a { padding: 0 0.45rem; font-size: 0.85rem; }
+  .bar-actions { gap: 0.6rem; font-size: 12px; }
+}
 
 .page {
   max-width: 40rem;
