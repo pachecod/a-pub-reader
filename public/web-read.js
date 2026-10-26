@@ -62,17 +62,22 @@
     }
   });
 
-  // The same sync as Sync Reader in the app, over Wi-Fi to the saved reader
-  // address: everything switched on that is not there yet goes over, and
+  // The same sync as Sync Reader in the app, the way the app last synced —
+  // over Wi-Fi to the saved reader address, or into the saved card or synced
+  // cloud folder: everything switched on that is not there yet goes over, and
   // everything switched off comes off.
   syncLink?.addEventListener('click', async () => {
     syncLink.disabled = true;
     syncLink.textContent = 'Syncing…';
     let message = '';
     try {
-      const { items } = await api('/api/outbox');
+      const [{ items }, config] = await Promise.all([api('/api/outbox'), api('/api/config')]);
       const ids = items.filter((i) => i.onReader !== false && !i.deliveredAt).map((i) => i.id);
-      const result = await api('/api/send', { method: 'POST', body: JSON.stringify({ ids }) });
+      const viaFolder = config.destination && config.destination !== 'wifi';
+      const result = await api(viaFolder ? '/api/send-volume' : '/api/send', {
+        method: 'POST',
+        body: JSON.stringify(viaFolder ? { ids, volume: config.destination } : { ids }),
+      });
       const mine = result.results?.find((r) => r.id === id);
       if (result.error && !result.results?.length) message = result.error;
       else if (mine && !mine.ok) message = mine.error;

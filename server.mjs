@@ -67,6 +67,10 @@ const FETCH_TIMEOUT_MS = 30000;
 
 const DEFAULT_CONFIG = {
   host: DEFAULT_HOST,
+  // Where Sync Reader goes: 'wifi', or the path of a mounted card or synced
+  // cloud folder from /api/volumes. Remembered so a reading page syncs the
+  // same way the app last did.
+  destination: 'wifi',
   includeImages: true,
   // Fixed-layout ("comic book") output: each page becomes an image.
   imageMode: false,
@@ -114,6 +118,7 @@ async function writeConfig(patch) {
   const { folder, ...rest } = patch || {};
   const next = { ...(await readConfig()), ...rest };
   next.host = normalizeHost(next.host);
+  next.destination = typeof next.destination === 'string' && next.destination ? next.destination : 'wifi';
   next.includeImages = Boolean(next.includeImages);
   next.imageMode = Boolean(next.imageMode);
   next.imageScale = clamp(Number(next.imageScale) || 1, 1, 3);

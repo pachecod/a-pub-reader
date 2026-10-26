@@ -78,6 +78,8 @@ let results = [];
  * tell which item had a problem.
  */
 const sendFailures = new Map();
+/** The Send via choice saved last time, applied once the list is loaded. */
+let savedDestination = 'wifi';
 /** Mounted drives that might be the reader's card. */
 let volumes = [];
 let busy = false;
@@ -443,7 +445,12 @@ function toSync() {
   return results.filter((r) => r.onReader && !r.deliveredAt);
 }
 
-const syncLabel = () => (el.destination.value !== 'wifi' ? 'Sync drive' : 'Sync Reader');
+// A synced cloud folder reaches the reader through the cloud, so it is still
+// Sync Reader; a card in the Mac is a drive being copied to.
+const syncLabel = () => {
+  if (el.destination.value === 'wifi') return 'Sync Reader';
+  return volumes.find((v) => v.path === el.destination.value)?.kind === 'cloud' ? 'Sync Reader' : 'Sync drive';
+};
 
 function updateSyncButtons() {
   const changes = toSync().length + pendingRemovals.length;
@@ -1293,20 +1300,26 @@ async function loadVolumes() {
 
   const options = [new Option('Wi-Fi', 'wifi')];
   for (const volume of volumes) {
-    const label = volume.likely
-      ? `${volume.name} — looks like the reader's card`
-      : `${volume.name}${volume.writable ? '' : ' (read-only)'}`;
+    const label = volume.kind === 'cloud'
+      ? `${volume.name} — synced folder${volume.writable ? '' : ' (no access)'}`
+      : volume.likely
+        ? `${volume.name} — looks like the reader's card`
+        : `${volume.name}${volume.writable ? '' : ' (read-only)'}`;
     options.push(new Option(label, volume.path));
   }
   el.destination.replaceChildren(...options);
 
-  // Keep the current choice if that drive is still mounted.
-  el.destination.value = [...el.destination.options].some((o) => o.value === previous) ? previous : 'wifi';
+  // Keep the current choice, or the one saved last time, if it is still there.
+  const has = (value) => [...el.destination.options].some((o) => o.value === value);
+  el.destination.value = has(previous) && previous !== 'wifi'
+    ? previous
+    : has(savedDestination) ? savedDestination : 'wifi';
   syncDestination();
 }
 
 function syncDestination() {
   const viaVolume = el.destination.value !== 'wifi';
+  savedDestination = el.destination.value;
   el.hostField.hidden = viaVolume;
   el.find.hidden = viaVolume;
   el.useHotspot.hidden = viaVolume;
@@ -1314,7 +1327,16 @@ function syncDestination() {
 
   if (viaVolume) {
     const volume = volumes.find((v) => v.path === el.destination.value);
-    setDevice('ok', volume ? `Copying to ${volume.name}${volume.likely ? '' : ' (unverified)'}` : 'Drive selected');
+    if (volume?.kind === 'cloud') {
+      setDevice(
+        volume.writable ? 'ok' : 'off',
+        volume.writable
+          ? `Syncing through ${volume.name}: files go to “${volume.path}”, and a reader signed in to the same account picks them up`
+          : `${volume.name} can't be written: ${volume.problem || 'no access'}. Allow it in System Settings → Privacy & Security → Files & Folders.`
+      );
+    } else {
+      setDevice('ok', volume ? `Copying to ${volume.name}${volume.likely ? '' : ' (unverified)'}` : 'Drive selected');
+    }
   } else {
     checkDevice();
   }
@@ -1385,6 +1407,7 @@ async function loadConfig() {
   try {
     const config = await api('/api/config');
     el.host.value = config.host || 'crosspoint.local';
+    savedDestination = config.destination || 'wifi';
     el.includeImages.checked = config.includeImages !== false;
     el.imageMode.checked = Boolean(config.imageMode);
     el.imageScale.value = String(config.imageScale || 2);
@@ -1413,6 +1436,7 @@ async function saveConfig() {
       method: 'POST',
       body: JSON.stringify({
         host: el.host.value.trim(),
+        destination: el.destination.value || 'wifi',
         includeImages: el.includeImages.checked,
         imageMode: el.imageMode.checked,
         imageScale: Number(el.imageScale.value),
@@ -1536,7 +1560,10 @@ for (const control of [el.imageScale, el.imageSplit, el.imageFont]) {
   control.addEventListener('change', saveConfig);
 }
 
-el.destination.addEventListener('change', syncDestination);
+el.destination.addEventListener('change', () => {
+  syncDestination();
+  saveConfig();
+});
 
 loadConfig().then(async () => {
   // The queue is local state, so show it immediately. Chaining it behind the

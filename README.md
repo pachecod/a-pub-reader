@@ -85,6 +85,22 @@ mode that hands the raw SD card to the host, but `FREEINK_CAP_USB_MSC` is set
 only for the USB-OTG builds (X4 Pro, X4C, Paper Mono), so it is absent on the
 base X4.
 
+### Boox and other readers that sync with a cloud drive
+
+A Boox (or any reader that syncs with Google Drive, OneDrive or Dropbox) is
+reached through a synced folder instead of Wi-Fi. With Google Drive for desktop
+installed and signed in, **Send via** offers **Google Drive (your account) —
+synced folder**. Sync Reader then copies into **My Drive/A-Pub Reader**, with
+`A-pub Books`, `A-pub Notes` and `A-pub Feeds` inside, and removes what is
+switched off, just as on a card. On the Boox, sign in to the same Google
+account under its cloud storage and open that folder.
+
+OneDrive and Dropbox folders are offered the same way. The app only ever
+writes inside its own **A-Pub Reader** folder. macOS may ask once before letting
+the app into cloud storage; until that is allowed the folder is listed as
+*no access*. The Send via choice is remembered, and the reading pages' Sync
+Reader link uses it too.
+
 ### Copying via the SD card
 
 When a network won't cooperate — campus and guest Wi-Fi often stop devices from

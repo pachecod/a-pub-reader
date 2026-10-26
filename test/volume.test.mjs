@@ -18,8 +18,14 @@ const assert = (cond, msg) => {
 // Must be set before the module is imported — it reads the root at load time.
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'epub-drop-vols-'));
 process.env.EPUB_DROP_VOLUMES_ROOT = root;
+// Synced cloud folders are looked for here instead of ~/Library/CloudStorage,
+// so the real ones on this Mac never take part.
+const cloudRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'epub-drop-cloud-'));
+process.env.EPUB_DROP_CLOUD_ROOT = cloudRoot;
 
 const {
+  CLOUD_FOLDER,
+  listCloudFolders,
   listVolumes,
   resolveVolume,
   copyToVolume,
@@ -137,6 +143,42 @@ assert(readOnlyRefused, 'copying to a read-only drive fails with a clear reason'
 console.log('\n== missing folder ==');
 assert((await listVolumeFiles(card, '/Never-Created')).length === 0, 'listing a folder that does not exist is empty, not an error');
 
+console.log('\n== synced cloud folders ==');
+// What Google Drive and OneDrive for desktop create, plus something that is not
+// a cloud drive at all.
+const drive = path.join(cloudRoot, 'GoogleDrive-reader@example.com', 'My Drive');
+await fs.mkdir(drive, { recursive: true });
+await fs.writeFile(path.join(drive, 'My own notes.txt'), 'not the app’s');
+await fs.mkdir(path.join(cloudRoot, 'OneDrive-Example University'), { recursive: true });
+await fs.mkdir(path.join(cloudRoot, 'Something Else'), { recursive: true });
+
+const clouds = await listCloudFolders();
+assert(clouds.length === 2, `the Google Drive and OneDrive folders are found, nothing else: ${clouds.map((c) => c.name).join(', ')}`);
+const google = clouds.find((c) => c.provider === 'Google Drive');
+assert(google?.name === 'Google Drive (reader@example.com)', `named with its account: ${google?.name}`);
+assert(google?.path === path.join(drive, CLOUD_FOLDER), "files go into the app's own folder inside My Drive");
+assert(google?.kind === 'cloud' && google.writable === true, 'marked as a writable synced folder');
+assert((await listVolumes()).some((v) => v.path === google.path), 'and offered alongside the mounted drives');
+
+// With no drives folder at all, the cloud folders are still offered.
+const savedRoot = root;
+await fs.rename(root, `${root}-away`);
+assert((await listVolumes()).some((v) => v.kind === 'cloud'), 'cloud folders are listed even with no drives folder');
+await fs.rename(`${root}-away`, savedRoot);
+
+const viaCloud = await resolveVolume(google.path);
+assert(viaCloud?.kind === 'cloud', 'a sync can resolve the cloud folder it was given');
+assert((await resolveVolume(drive)) === null, "the drive's own root is not a destination");
+
+await copyToVolume(viaCloud, '/A-pub Books', 'Cloud Book.epub', Buffer.from('epub bytes'));
+const copied = path.join(drive, CLOUD_FOLDER, 'A-pub Books', 'Cloud Book.epub');
+assert(await fs.access(copied).then(() => true).catch(() => false), 'a book lands in A-Pub Reader/A-pub Books, created on first use');
+
+const cloudDeleted = await deleteFromVolume(viaCloud, '/A-pub Books', ['Cloud Book.epub', '../../My own notes.txt']);
+assert(cloudDeleted[0].ok && !cloudDeleted[1].ok, 'switching off removes the book, and nothing outside the app folder can be named');
+assert(await fs.access(path.join(drive, 'My own notes.txt')).then(() => true).catch(() => false), 'your own files in the drive are untouched');
+
+await fs.rm(cloudRoot, { recursive: true, force: true });
 await fs.rm(root, { recursive: true, force: true });
 
 console.log(`\n${pass} passed, ${fail} failed`);

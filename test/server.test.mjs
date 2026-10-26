@@ -115,6 +115,8 @@ const app = spawn(process.execPath, [path.join(ROOT, 'server.mjs')], {
     EPUB_DROP_OUT_DIR: path.join(sandbox, 'out'),
     EPUB_DROP_CONFIG: path.join(sandbox, 'config.json'),
     EPUB_DROP_STATE: sandbox,
+    // Keep the real synced cloud folders on this Mac out of the test app.
+    EPUB_DROP_CLOUD_ROOT: path.join(sandbox, 'cloud'),
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
