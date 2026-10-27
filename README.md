@@ -39,6 +39,40 @@ live anywhere. Requires Node.js; it installs dependencies on first run.
 Binds to `127.0.0.1` only. Nothing leaves your machine except fetching a URL you
 paste and uploading to your reader on the local network.
 
+## Hosting it (Render)
+
+The app can also run on a server — for example to open it in a Boox's web
+browser from anywhere. Hosted, it is a **library and reader**: feeds, dropped
+files, links, books, writing and the reading pages all work, but it cannot reach
+a reader on your home Wi-Fi, a card in your Mac or a synced folder on it, so the
+On reader switches, Sync Reader and reader status are hidden and those routes
+are off. Running it on your own computer is unchanged.
+
+`render.yaml` sets this up on [Render](https://render.com):
+
+1. Push the repository to GitHub.
+2. In Render: **New → Blueprint**, pick the repository.
+3. Enter a password for **APP_PASSWORD** when asked. The browser will ask for
+   it (any user name) before showing anything.
+4. Open the service's `onrender.com` address, on the Boox or anywhere else.
+
+Hosting is controlled by environment variables:
+
+| Variable | Meaning |
+|---|---|
+| `HOST` | Where to listen. Unset keeps it on this computer; `0.0.0.0` listens publicly, turns on hosted mode, and requires `APP_PASSWORD`. |
+| `APP_PASSWORD` | The password for every page and request (HTTP Basic sign-in). |
+| `HOSTED=1` | Hosted mode without listening publicly (used by the tests). |
+| `EPUB_DROP_STATE`, `EPUB_DROP_OUT_DIR`, `EPUB_DROP_CONFIG` | Where the library, built books and settings are kept. |
+
+`/healthz` answers without the password, for Render's health checks.
+
+**Keeping your library.** Render's free plan keeps no files: the library starts
+empty again whenever the service restarts, is redeployed, or sleeps after 15
+minutes without visits (the first visit after that also takes a minute to wake
+it). To keep it, switch `render.yaml` to `plan: starter`, uncomment the disk, and
+point the three data variables at `/var/data` — Render charges for both.
+
 ## The loop
 
 **Drop or write → Convert → Preview → Sync Reader**, with the reader's

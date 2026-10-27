@@ -37,7 +37,7 @@
   <div class="panel" id="tab-read" role="tabpanel" aria-labelledby="tabbtn-read">
     <!-- Makes the reader match the On reader switches below: sends what is
          switched on and takes off what is switched off. -->
-    <div class="sync-bar">
+    <div class="sync-bar device-only">
       <p id="read-sync-status" class="status" aria-live="polite"></p>
       <button id="read-sync" type="button" class="primary" disabled>Sync Reader</button>
     </div>
@@ -71,7 +71,7 @@
         </li>
       </ul>
 
-      <p class="onboard-note">
+      <p class="onboard-note device-only">
         Have an Xteink reader? Converting works offline. <strong>Sync Reader</strong> needs the
         reader awake with <strong>File Transfer</strong> open on its screen — so the usual
         order is add everything first, then connect and sync once.
@@ -214,7 +214,7 @@
         <p id="feeds-status" class="status"></p>
         </section>
       </div>
-      <div class="column">
+      <div class="column device-only">
         <h2 class="column-title">Push to reader</h2>
         <section id="queue-section" class="hidden">
         <div class="row-between">
@@ -295,7 +295,7 @@
       </div>
     </div>
 
-    <section class="help">
+    <section class="help device-only">
     <details>
     <summary>Getting the reader ready</summary>
     <ol>
@@ -540,7 +540,7 @@
 <!-- Reader connection status. Kept small and out of the way: most visits are
      for reading, and the device is often simply switched off. The full message
      sits behind the info button. -->
-<footer class="status-bar">
+<footer class="status-bar device-only">
   <div id="device" class="device" data-state="unknown">
     <span class="dot" aria-hidden="true"></span>
     <span id="device-label">Checking reader…</span>

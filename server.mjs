@@ -2,16 +2,18 @@
 // feeds, browse book catalogues or write your own, then send the results to an
 // Xteink reader running CrossPoint firmware.
 //
-// Binds to 127.0.0.1 only. The browser reads dropped files itself — HTML as
-// text, PDFs as base64 — and POSTs JSON, so there is no multipart parsing on
-// the way in.
+// Binds to 127.0.0.1 by default. Set HOST (for example 0.0.0.0 on Render) to
+// listen publicly; that requires APP_PASSWORD and turns on hosted mode, a
+// library-and-reading app with the device features off. The browser reads
+// dropped files itself — HTML as text, PDFs as base64 — and POSTs JSON, so there
+// is no multipart parsing on the way in.
 
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 
 import { extractArticle } from './lib/extract.mjs';
 import { extractPdf } from './lib/pdf.mjs';
@@ -61,6 +63,24 @@ const OUT_DIR = process.env.EPUB_DROP_OUT_DIR || path.join(ROOT, 'out');
 const CONFIG_PATH = process.env.EPUB_DROP_CONFIG || path.join(ROOT, 'config.json');
 
 const PORT = Number(process.env.PORT || 4321);
+// Where to listen. The default keeps the app on this computer only.
+const HOST = process.env.HOST || '127.0.0.1';
+const LOOPBACK = ['127.0.0.1', '::1', 'localhost'].includes(HOST);
+// A password for every page and request, as an HTTP Basic sign-in. Required
+// whenever the app listens beyond this computer.
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
+// Hosted mode: running on a server (such as Render) rather than the computer
+// next to the reader. A server cannot reach a reader on your home Wi-Fi, a card
+// in your Mac or a synced folder on it, so those features are switched off and
+// the app is a library and reader. On whenever it listens publicly.
+const HOSTED = process.env.HOSTED === '1' || !LOOPBACK;
+if (!LOOPBACK && !APP_PASSWORD) {
+  console.error(
+    `\n  Refusing to listen on ${HOST} without a password. Set APP_PASSWORD, or leave\n` +
+      '  HOST unset to keep the app on this computer.\n'
+  );
+  process.exit(1);
+}
 // PDFs arrive base64-encoded, which inflates them by a third.
 const MAX_BODY_BYTES = 96 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 30000;
@@ -124,6 +144,8 @@ async function writeConfig(patch) {
   next.imageScale = clamp(Number(next.imageScale) || 1, 1, 3);
   next.imageSplit = ['whole', 'halves', 'thirds'].includes(next.imageSplit) ? next.imageSplit : 'whole';
   next.imageFontSize = clamp(Number(next.imageFontSize) || 21, 12, 40);
+  // A fresh host (Render) starts without the data folder.
+  await fs.mkdir(path.dirname(CONFIG_PATH), { recursive: true });
   await fs.writeFile(CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`);
   return next;
 }
@@ -567,7 +589,8 @@ async function refreshFeed(feed) {
 // ---------------------------------------------------------------- routes
 
 const routes = {
-  'GET /api/config': async () => json(200, await readConfig()),
+  // `hosted` tells the page which features exist; it is not a saved setting.
+  'GET /api/config': async () => json(200, { ...(await readConfig()), hosted: HOSTED }),
 
   'POST /api/config': async (req) => json(200, await writeConfig(await body(req))),
 
@@ -1257,9 +1280,54 @@ async function runRemovals(how) {
   return done;
 }
 
+/** Whether a request carries the app's password, as HTTP Basic credentials. */
+function authorized(req) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Basic ')) return false;
+  const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+  const given = decoded.slice(decoded.indexOf(':') + 1);
+  // Compare digests so the comparison takes the same time whatever was typed.
+  const digest = (text) => createHash('sha256').update(text).digest();
+  return timingSafeEqual(digest(given), digest(APP_PASSWORD));
+}
+
+// Device features: talking to a reader on the local network, copying to a card
+// or synced folder on this computer, scanning the network for a reader, and
+// showing a file in Finder. None of these mean anything on a hosted server, and
+// the network scan and device probes would point at the host's own network.
+const DEVICE_ROUTES = new Set([
+  'GET /api/device',
+  'POST /api/discover',
+  'POST /api/send',
+  'POST /api/send-volume',
+  'GET /api/volumes',
+  'POST /api/reveal',
+]);
+
 async function handle(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const key = `${req.method} ${url.pathname}`;
+
+  // For the host's health checks, which come without the password.
+  if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, 'text/plain', 'ok');
+
+  if (APP_PASSWORD && !authorized(req)) {
+    res.writeHead(401, {
+      'www-authenticate': 'Basic realm="A-Pub Reader", charset="UTF-8"',
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    return res.end('A-Pub Reader needs its password.');
+  }
+
+  if (HOSTED && DEVICE_ROUTES.has(key)) {
+    return send(
+      res,
+      403,
+      'application/json',
+      JSON.stringify({ error: 'Syncing with a reader works only when A-Pub Reader runs on your own computer.' })
+    );
+  }
 
   // Editor images, referenced from draft markdown as /assets/<name>.
   const assetMatch = /^\/assets\/([0-9a-f]{16}\.(?:png|jpg))$/i.exec(url.pathname);
@@ -1305,7 +1373,7 @@ async function handle(req, res) {
     const entry = await outbox.get(readMatch[1]);
     if (!entry) return send(res, 404, 'text/plain', 'That item is no longer here.');
     try {
-      const html = await renderWebPage(entry);
+      const html = await renderWebPage(entry, { hosted: HOSTED });
       res.writeHead(200, {
         'content-type': MIME['.html'],
         'cache-control': 'no-store',
@@ -1472,8 +1540,13 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, '127.0.0.1', async () => {
+server.listen(PORT, HOST, async () => {
   const config = await readConfig();
+  if (HOSTED) {
+    console.log(`\n  A-Pub Reader (hosted)  →  listening on ${HOST}:${PORT}`);
+    console.log(`  password: ${APP_PASSWORD ? 'required' : 'off'}   device features: off\n`);
+    return;
+  }
   console.log(`\n  A-Pub Reader  →  http://localhost:${PORT}`);
   console.log(`  reader: ${config.host}`);
   console.log('  On the reader: open File Transfer and join Wi-Fi.\n');

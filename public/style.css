@@ -607,6 +607,14 @@ a { color: var(--accent); }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; text-align: center; }
 
+/* Hosted (on a server rather than your own computer) there is no reader to
+   reach: everything about syncing with one is hidden, and Add/Remove becomes a
+   single column. */
+.hosted .device-only,
+.hosted .reader-switch,
+.hosted #pending-badge { display: none !important; }
+.hosted .columns { grid-template-columns: minmax(0, 1fr); }
+
 /* Add/Remove: the sync controls open the queue, and Sync Reader closes it. */
 .sync-controls { margin-top: 0.6rem; }
 .sync-bottom { justify-content: flex-end; }

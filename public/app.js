@@ -78,6 +78,8 @@ let results = [];
  * tell which item had a problem.
  */
 const sendFailures = new Map();
+/** Running on a server, with the device features off (from /api/config). */
+let hosted = false;
 /** The Send via choice saved last time, applied once the list is loaded. */
 let savedDestination = 'wifi';
 /** Mounted drives that might be the reader's card. */
@@ -1291,6 +1293,8 @@ async function loadOutbox() {
  * writing books onto someone's backup disk would be worse than making them pick.
  */
 async function loadVolumes() {
+  // Hosted, there are no drives or reader to look for.
+  if (hosted) return;
   const previous = el.destination.value;
   try {
     ({ volumes } = await api('/api/volumes'));
@@ -1345,6 +1349,7 @@ function syncDestination() {
 // ---------------------------------------------------------------- device
 
 async function checkDevice() {
+  if (hosted) return;
   // A drive destination has its own label; polling the reader would overwrite it.
   if (el.destination.value !== 'wifi') return;
   setDevice('busy', 'Checking reader…');
@@ -1406,6 +1411,8 @@ el.deviceInfo.addEventListener('click', () => {
 async function loadConfig() {
   try {
     const config = await api('/api/config');
+    hosted = Boolean(config.hosted);
+    document.documentElement.classList.toggle('hosted', hosted);
     el.host.value = config.host || 'crosspoint.local';
     savedDestination = config.destination || 'wifi';
     el.includeImages.checked = config.includeImages !== false;

@@ -1,0 +1,43 @@
+# Render blueprint for A-Pub Reader, hosted as a library and reader.
+#
+# In Render: New → Blueprint → pick this repository. Render reads this file,
+# asks for APP_PASSWORD (the password the app will ask for), and deploys.
+#
+# Hosted, the app cannot reach a reader on your home Wi-Fi, a card in your Mac
+# or a synced folder on it, so syncing is switched off; everything else —
+# feeds, files, links, books, writing, and reading in the browser — works.
+#
+# The free plan keeps no files: the library starts empty again whenever the
+# service restarts, is redeployed, or sleeps after 15 minutes without visits.
+# To keep it, use a paid plan with a disk: change `plan: free` to
+# `plan: starter` and uncomment the disk block below (Render charges for both).
+
+services:
+  - type: web
+    name: a-pub-reader
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node server.mjs
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Listen publicly. This also turns on hosted mode and requires a password.
+      - key: HOST
+        value: 0.0.0.0
+      # Render prompts for this when the blueprint is first applied.
+      - key: APP_PASSWORD
+        sync: false
+      # Where the library lives. On the free plan this is the service's own
+      # temporary disk; with the disk below, point all three at /var/data.
+      - key: EPUB_DROP_STATE
+        value: /opt/render/project/src/data
+      - key: EPUB_DROP_OUT_DIR
+        value: /opt/render/project/src/data/out
+      - key: EPUB_DROP_CONFIG
+        value: /opt/render/project/src/data/config.json
+    # disk:
+    #   name: library
+    #   mountPath: /var/data
+    #   sizeGB: 1

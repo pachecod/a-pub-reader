@@ -11,3 +11,8 @@ feeds.json
 # Local test documents, kept out of the repository.
 examples/
 *.tmp
+
+# Hosted data and local environment settings (passwords belong in Render, not here).
+data/
+.env
+.env.*
