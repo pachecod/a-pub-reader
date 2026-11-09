@@ -425,12 +425,41 @@ function renderResults(failures = []) {
  * A sync can upload, delete, or both, and saying "Sent 0" after successfully
  * clearing three files off the reader reads as a failure.
  */
+/** What a set of synced files were, counted by the folder each went to. */
+const KINDS = {
+  '/A-pub Books': ['book', 'books'],
+  '/A-pub Notes': ['note', 'notes'],
+  '/A-pub Feeds': ['feed edition', 'feed editions'],
+};
+
+function describeFiles(entries) {
+  const counts = new Map();
+  for (const entry of entries) {
+    const [one, many] = KINDS[entry.folder] || ['file', 'files'];
+    const tally = counts.get(one) || { n: 0, one, many };
+    tally.n++;
+    counts.set(one, tally);
+  }
+  const parts = [...counts.values()].map(({ n, one, many }) => `${n} ${n === 1 ? one : many}`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] || '';
+}
+
+/**
+ * One line describing what a sync did.
+ *
+ * A sync can upload, delete, or both, and says what it moved — books, notes or
+ * feed editions, by the folder each went to — rather than a bare count and one
+ * folder, so a sync of only feeds does not read as books going over. "Sent 0"
+ * after successfully clearing three files off the reader would read as a
+ * failure, so each part appears only when it happened.
+ */
 function summarize(okCount, payload) {
-  const removed = (payload.removed || []).filter((r) => r.ok).length;
+  const sent = (payload.results || []).filter((r) => r.ok);
+  const removed = (payload.removed || []).filter((r) => r.ok);
   const stuck = (payload.removed || []).filter((r) => !r.ok).length;
   const parts = [];
-  if (okCount) parts.push(`Sent ${okCount} to ${payload.host}${payload.folder}`);
-  if (removed) parts.push(`removed ${removed} from the reader`);
+  if (okCount) parts.push(`Sent ${describeFiles(sent) || okCount} to ${payload.host}`);
+  if (removed.length) parts.push(`${parts.length ? 'removed' : 'Removed'} ${describeFiles(removed)} from the reader`);
   if (stuck) parts.push(`${stuck} could not be removed — still queued`);
   if (!parts.length) return 'Nothing to do.';
   return `${parts.join(' · ')}.`;
