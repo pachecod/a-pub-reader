@@ -611,7 +611,6 @@ a { color: var(--accent); }
    On reader switch and the forget × in its top right corner. */
 .library-block { position: relative; list-style: none; min-width: 0; }
 .library-block > .reading-feed, .library-block > .reading-item { height: 100%; }
-.library-block .reading-feed-head { padding-right: 1.6rem; }
 .library-block .reading-item-title { padding-right: 1.4rem; }
 .library-block .card-forget { top: 0.55rem; right: 0.5rem; }
 .library-block .reading-feed > .reader-switch {

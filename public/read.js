@@ -95,7 +95,10 @@
     li.className = 'library-block';
     const toggle = window.epubDrop?.readerSwitch?.(entry);
     if (toggle) (block.querySelector('.reading-item-body') || block).appendChild(toggle);
-    li.append(block, forgetButton(entry));
+    li.appendChild(block);
+    // A feed is dropped under Add/Remove → Feeds and kept off the reader with
+    // its switch, so its edition gets no forget control of its own.
+    if (summary.kind !== 'feed') li.appendChild(forgetButton(entry));
     return li;
   }
 
@@ -141,8 +144,8 @@
     li.appendChild(body);
 
     // Downloading lives on the reading page; the card itself only reads or
-    // forgets.
-    li.appendChild(forgetButton(entry));
+    // forgets (except a feed edition, which its feed and switch look after).
+    if (entry.source?.kind !== 'feed') li.appendChild(forgetButton(entry));
     return li;
   }
 

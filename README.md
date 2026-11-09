@@ -258,8 +258,9 @@ switch as the Library card and, above it, **Send via**, **Reader address** and
 **Sync Reader** (repeated under a list that has items). A dropped PDF, a pasted
 URL, a draft and a feed refresh all land there, tagged with where they came
 from and where they are going; like the Library, only a feed's newest edition is
-listed. A row's title opens its reading page, and **×** forgets it, asking
-first, as in the Library.
+listed. A row's title opens its reading page, and on a book or note **×** forgets
+it, asking first, as in the Library. Feed editions have no **×**: a feed is
+dropped under **Feeds**, and kept off the reader with its switch.
 
 Where each item goes on the reader is decided by what it is: books to
 `/A-pub Books`, notes to `/A-pub Notes` and feed editions to `/A-pub Feeds`.
@@ -390,8 +391,8 @@ never change, so each summary is computed once and kept in memory.
 
 The **Library** draws each section the same way once it has something in it —
 feed editions as front pages, books with their covers and descriptions, notes
-with their openings — with each item's **On reader** switch and its **×** to
-forget added; empty sections keep their buttons for adding things. (The Read
+with their openings — with each item's **On reader** switch added, and a **×** to forget on books
+and notes (a feed is dropped under Add/Remove → Feeds); empty sections keep their buttons for adding things. (The Read
 tab may go once the Library covers it.)
 
 Reading pages opened from Read say **← Return to Read** and highlight Read in

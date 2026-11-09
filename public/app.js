@@ -410,7 +410,10 @@ function renderResults(failures = []) {
     // The same Forget dialog as the Library's ×, so both ask before acting.
     remove.addEventListener('click', () => window.epubDropRead?.askForget(r));
 
-    li.append(body, remove);
+    // Feed editions have no × here either: a feed is dropped under Feeds, and
+    // kept off the reader with its switch.
+    if (r.source?.kind === 'feed') li.appendChild(body);
+    else li.append(body, remove);
     nodes.push(li);
   }
 
