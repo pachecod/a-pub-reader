@@ -14,6 +14,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import JSZip from 'jszip';
 
 import { extractArticle } from './lib/extract.mjs';
 import { extractPdf } from './lib/pdf.mjs';
@@ -134,6 +135,7 @@ const HEAVY_ROUTES = new Set([
   'POST /api/feeds/refresh',
   'GET /api/feeds/check',
   'GET /api/feeds/discover',
+  'GET /download/ebooks.zip',
 ]);
 const APP_CSP = appCsp();
 const FETCH_TIMEOUT_MS = 30000;
@@ -1587,6 +1589,11 @@ async function handle(req, res) {
     }
   }
 
+  // Every eBook in the library as one zip, in the folders they use on the reader.
+  if (req.method === 'GET' && url.pathname === '/download/ebooks.zip') {
+    return sendLibraryZip(res);
+  }
+
   // Local EPUB download (also the "keep a copy" path).
   if (req.method === 'GET' && url.pathname.startsWith('/out/')) {
     const job = await outbox.get(url.pathname.slice('/out/'.length));
@@ -1612,6 +1619,36 @@ async function handle(req, res) {
 
   if (req.method === 'GET') return serveStatic(res, url.pathname);
   return send(res, 404, 'text/plain', 'Not found');
+}
+
+/**
+ * Stream every EPUB in the library as one zip. EPUBs are already compressed,
+ * so they are stored rather than squeezed again, and the zip is streamed so a
+ * large library never sits in memory whole.
+ */
+async function sendLibraryZip(res) {
+  const items = await outbox.list();
+  if (!items.length) return send(res, 404, 'text/plain', 'There are no eBooks to download yet.');
+  const zip = new JSZip();
+  const used = new Set();
+  for (const item of items) {
+    const folder = normalizePath(item.folder || BOOKS_FOLDER).replace(/^\/+/, '');
+    let name = `${folder}/${item.filename}`;
+    // Two items may share a filename (a feed and its replacement); keep both.
+    for (let n = 2; used.has(name); n++) name = `${folder}/${item.filename.replace(/\.epub$/i, '')} (${n}).epub`;
+    used.add(name);
+    zip.file(name, await outbox.readEpub(item));
+  }
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.writeHead(200, {
+    'content-type': 'application/zip',
+    'content-disposition': `attachment; filename="A-Pub Reader eBooks ${stamp}.zip"`,
+    'cache-control': 'no-store',
+  });
+  zip
+    .generateNodeStream({ type: 'nodebuffer', streamFiles: true, compression: 'STORE' })
+    .on('error', () => res.destroy())
+    .pipe(res);
 }
 
 async function serveStatic(res, pathname) {

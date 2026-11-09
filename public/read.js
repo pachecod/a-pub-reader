@@ -36,6 +36,7 @@
     forgetDevice: $('forget-device'),
     booksSection: $('read-books-section'),
     summary: $('library-summary'),
+    download: $('library-download'),
     feedsNew: $('feeds-new'),
     addLinks: $('library-add'),
     layout: $('read-layout'),
@@ -213,6 +214,8 @@
       // articles take the full width and the ways to add those become links
       // beside it, rather than a sidebar of empty boxes.
       el.summary.textContent = nothingYet ? '' : window.epubDropReading?.summaryLine(reading.items) || '';
+      // Every eBook in one zip, in the same folders they use on the reader.
+      el.download.hidden = nothingYet;
       const sideEmpty = !nothingYet && !books.length && !notes.length;
       el.side.hidden = sideEmpty;
       el.layout.classList.toggle('read-wide', sideEmpty);

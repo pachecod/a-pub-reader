@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import JSZip from 'jszip';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const APP_PORT = 4399;
@@ -235,6 +236,16 @@ try {
     download.headers.get('content-type') === 'application/epub+zip' && bytes.length === ok.size,
     `local download serves the EPUB (${bytes.length} bytes)`
   );
+
+  console.log('\n== download all eBooks ==');
+  const all = await fetch(`http://127.0.0.1:${APP_PORT}/download/ebooks.zip`);
+  assert(all.ok && all.headers.get('content-type') === 'application/zip', 'the library downloads as one zip');
+  assert(/attachment; filename="A-Pub Reader eBooks \d{4}-\d{2}-\d{2}\.zip"/.test(all.headers.get('content-disposition') || ''), 'named for the app and the day');
+  const archive = await JSZip.loadAsync(Buffer.from(await all.arrayBuffer()));
+  const names = Object.keys(archive.files).filter((n) => !archive.files[n].dir);
+  const inZip = names.find((n) => n.endsWith('/Framing the News.epub'));
+  assert(inZip && /^A-pub \w+\//.test(inZip), `each eBook sits in its reader folder: ${inZip}`);
+  assert(inZip && (await archive.file(inZip).async('nodebuffer')).equals(bytes), 'and is the same file as a single download');
 
   console.log('\n== web reading page ==');
   const web = await fetch(`http://127.0.0.1:${APP_PORT}/read/${ok.id}`);

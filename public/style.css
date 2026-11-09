@@ -725,6 +725,8 @@ a { color: var(--accent); }
 .library-summary { margin: 0; color: var(--muted); font-size: 0.9rem; }
 .library-summary:empty { display: none; }
 .library-add { display: inline-flex; gap: 0.9rem; }
+.library-download { font-size: 0.9rem; }
+.library-download[hidden] { display: none; }
 .library-add[hidden] { display: none; }
 .sync-bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.9rem; margin-left: auto; }
 .sync-bar .status { margin: 0; text-align: right; }
