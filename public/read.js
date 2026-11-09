@@ -1,7 +1,9 @@
 'use strict';
 
 // The Library tab: everything this app has built, whether or not it has reached
-// the reader yet.
+// the reader yet, drawn readably — each section as the Read tab draws it (a
+// feed's articles, a book's cover and description, a note's opening), with
+// the On reader switch and a forget control on each item.
 //
 // Built from the queue's entries, split into books, notes and feed editions,
 // matching the three folders they live in on the device. They are used
@@ -64,6 +66,39 @@
     return then.toLocaleDateString();
   }
 
+  /** The Library's forget control: a quiet × in the corner, asking before it acts. */
+  function forgetButton(entry) {
+    const forget = document.createElement('button');
+    forget.type = 'button';
+    forget.className = 'card-forget';
+    forget.textContent = '×';
+    forget.title = 'Forget — remove it here, and optionally from the reader as well';
+    forget.setAttribute('aria-label', `Forget ${entry.title}`);
+    forget.addEventListener('click', () => askForget(entry));
+    return forget;
+  }
+
+  /**
+   * An item drawn as the Read tab draws it — a feed's articles, a book's cover
+   * and description, a note's opening — with the Library's On reader switch and
+   * × added. Without a summary (an unreadable file) it falls back to row().
+   */
+  function readableRow(entry, summary) {
+    const blocks = window.epubDropReading;
+    if (!summary || !blocks) return row(entry);
+    const block =
+      summary.kind === 'feed'
+        ? blocks.feedBlock(summary, { from: 'library' })
+        : blocks.itemBlock(summary, { from: 'library' });
+
+    const li = document.createElement('li');
+    li.className = 'library-block';
+    const toggle = window.epubDrop?.readerSwitch?.(entry);
+    if (toggle) (block.querySelector('.reading-item-body') || block).appendChild(toggle);
+    li.append(block, forgetButton(entry));
+    return li;
+  }
+
   function row(entry) {
     const li = document.createElement('li');
     li.className = 'item';
@@ -106,15 +141,8 @@
     li.appendChild(body);
 
     // Downloading lives on the reading page; the card itself only reads or
-    // forgets. Forget is a quiet × in the corner, asking before it acts.
-    const forget = document.createElement('button');
-    forget.type = 'button';
-    forget.className = 'card-forget';
-    forget.textContent = '×';
-    forget.title = 'Forget — remove it here, and optionally from the reader as well';
-    forget.setAttribute('aria-label', `Forget ${entry.title}`);
-    forget.addEventListener('click', () => askForget(entry));
-    li.appendChild(forget);
+    // forgets.
+    li.appendChild(forgetButton(entry));
     return li;
   }
 
@@ -135,7 +163,14 @@
     el.refresh.disabled = true;
     try {
       // Newest first, so for a feed the first edition seen is the current one.
-      const { items } = await api('/api/outbox');
+      // The summaries are what the Read tab shows; each section draws its
+      // items that way. If they cannot be had, the compact cards still work.
+      const [{ items }, reading] = await Promise.all([
+        api('/api/outbox'),
+        api('/api/reading').catch(() => ({ items: [] })),
+      ]);
+      const summaries = new Map(reading.items.map((s) => [s.id, s]));
+      const draw = (entry) => readableRow(entry, summaries.get(entry.id));
 
       // A refreshed feed can briefly hold two editions: the one on the reader
       // and its queued replacement. Only the newest is worth reading.
@@ -169,9 +204,9 @@
       el.notesCount.textContent = notes.length ? `· ${notes.length}` : '';
       el.notesEmpty.hidden = notes.length > 0;
 
-      el.books.replaceChildren(...books.map(row));
-      el.notes.replaceChildren(...notes.map(row));
-      el.feeds.replaceChildren(...feeds.map(row));
+      el.books.replaceChildren(...books.map(draw));
+      el.notes.replaceChildren(...notes.map(draw));
+      el.feeds.replaceChildren(...feeds.map(draw));
 
       if (pendingEpub) {
         const wanted = items.find((i) => i.id === pendingEpub);

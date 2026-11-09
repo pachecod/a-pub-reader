@@ -7,6 +7,10 @@
 // bylines and openings, each linking straight to that article on its reading
 // page — beside the books (cover, author, description) and notes (opening).
 // Links carry ?from=read so the reading page leads back here.
+//
+// The same blocks draw the Library's sections once they have something in
+// them (with the Library's switch and forget control added by read.js), so the
+// two stay alike; links from there lead back to the Library instead.
 
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -33,7 +37,9 @@
   let loading = null;
 
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  const readUrl = (id, chapter) => `/read/${id}?from=read${chapter ? `#ch-${chapter}` : ''}`;
+  /** A reading page, at a chapter, leading back to the Read tab or the Library. */
+  const readUrl = (id, chapter, from = 'read') =>
+    `/read/${id}${from === 'read' ? '?from=read' : ''}${chapter ? `#ch-${chapter}` : ''}`;
 
   function when(iso) {
     if (!iso) return '';
@@ -59,11 +65,11 @@
   }
 
   /** One feed edition: its name, then its articles, the first few at once. */
-  function feedBlock(item) {
+  function feedBlock(item, { from = 'read' } = {}) {
     const block = node('article', 'reading-feed');
     const head = node('header', 'reading-feed-head');
     head.append(
-      link(readUrl(item.id), 'reading-feed-name', item.title),
+      link(readUrl(item.id, 0, from), 'reading-feed-name', item.title),
       node('span', 'reading-feed-meta', `${plural(item.articles.length, 'article')} · ${when(item.builtAt)}`)
     );
     block.appendChild(head);
@@ -73,7 +79,7 @@
     item.articles.forEach((article, i) => {
       const li = node('li', 'reading-article');
       if (!showAll && i >= FIRST_ARTICLES) li.hidden = true;
-      li.appendChild(link(readUrl(item.id, article.n), 'reading-article-title', article.title));
+      li.appendChild(link(readUrl(item.id, article.n, from), 'reading-article-title', article.title));
       if (article.byline) li.appendChild(node('p', 'reading-byline', article.byline));
       if (article.excerpt) li.appendChild(node('p', 'reading-excerpt', article.excerpt));
       list.appendChild(li);
@@ -100,21 +106,21 @@
   }
 
   /** A book or a note: cover if there is one, title, author, opening. */
-  function itemBlock(item) {
+  function itemBlock(item, { from = 'read' } = {}) {
     const block = node('article', 'reading-item');
     if (item.cover) {
       const cover = node('img', 'reading-cover');
       cover.src = item.cover;
       cover.alt = '';
       cover.loading = 'lazy';
-      const coverLink = link(readUrl(item.id), 'reading-cover-link');
+      const coverLink = link(readUrl(item.id, 0, from), 'reading-cover-link');
       coverLink.setAttribute('aria-hidden', 'true');
       coverLink.tabIndex = -1;
       coverLink.appendChild(cover);
       block.appendChild(coverLink);
     }
     const body = node('div', 'reading-item-body');
-    body.appendChild(link(readUrl(item.id), 'reading-item-title', item.title));
+    body.appendChild(link(readUrl(item.id, 0, from), 'reading-item-title', item.title));
     const meta = [item.author, item.pages ? plural(item.pages, 'page') : item.chapters > 1 ? plural(item.chapters, 'chapter') : '', when(item.builtAt)]
       .filter(Boolean)
       .join(' · ');
@@ -191,6 +197,8 @@
 
   window.epubDropReading = {
     load,
+    feedBlock,
+    itemBlock,
     // The queue changed (a refresh, a forget, a new item): redraw if on screen.
     reloadIfShown: () => {
       if (!el.panel.hidden) load();

@@ -388,6 +388,12 @@ opening is the first real paragraph of the story, skipping standfirsts, photo
 captions, writer bios and a headline repeated as the first words. Built files
 never change, so each summary is computed once and kept in memory.
 
+The **Library** draws each section the same way once it has something in it —
+feed editions as front pages, books with their covers and descriptions, notes
+with their openings — with each item's **On reader** switch and its **×** to
+forget added; empty sections keep their buttons for adding things. (The Read
+tab may go once the Library covers it.)
+
 Reading pages opened from Read say **← Return to Read** and highlight Read in
 the menu; opened from the Library, they lead back there. Clicking Read, like
 Library, refreshes the feeds.

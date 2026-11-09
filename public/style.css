@@ -607,6 +607,20 @@ a { color: var(--accent); }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; text-align: center; }
 
+/* Library sections drawn as the Read tab draws them, each block carrying the
+   On reader switch and the forget × in its top right corner. */
+.library-block { position: relative; list-style: none; min-width: 0; }
+.library-block > .reading-feed, .library-block > .reading-item { height: 100%; }
+.library-block .reading-feed-head { padding-right: 1.6rem; }
+.library-block .reading-item-title { padding-right: 1.4rem; }
+.library-block .card-forget { top: 0.55rem; right: 0.5rem; }
+.library-block .reading-feed > .reader-switch {
+  margin-top: 0.4rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+.library-block .reading-item .reader-switch { margin-top: 0.5rem; }
+
 /* ---------------------------------------------------------------- Read tab
    A reading overview: feed editions like front pages in the wide column, books
    and notes beside them. Headlines and openings are set in the reading pages'
