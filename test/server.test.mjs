@@ -448,12 +448,15 @@ try {
   // Each edition needs a file of its own: forgetting one deletes its file.
   const copyOf = async (name) => {
     const target = path.join(sandbox, 'out', name);
-    await fs.copyFile(base.diskPath, target);
+    await fs.copyFile(path.join(sandbox, 'out', base.file), target);
     return target;
   };
+  // The older edition is written the way entries were before 2.0, with an
+  // absolute path instead of a storage key, which must still work.
+  const { file: _file, ...legacyBase } = base;
   stored.items.push(
-    { ...base, id: '11111111-1111-1111-1111-111111111111', diskPath: await copyOf('feed-old.epub'), filename: 'Test Feed - old.epub', folder: '/A-pub Feeds', source: feedSource, onReader: true, deliveredAt: new Date().toISOString(), builtAt: '2026-01-01T00:00:00.000Z' },
-    { ...base, id: '22222222-2222-2222-2222-222222222222', diskPath: await copyOf('feed-new.epub'), filename: 'Test Feed - new.epub', folder: '/A-pub Feeds', source: feedSource, onReader: true, deliveredAt: null, builtAt: '2026-01-02T00:00:00.000Z' }
+    { ...legacyBase, id: '11111111-1111-1111-1111-111111111111', diskPath: await copyOf('feed-old.epub'), filename: 'Test Feed - old.epub', folder: '/A-pub Feeds', source: feedSource, onReader: true, deliveredAt: new Date().toISOString(), builtAt: '2026-01-01T00:00:00.000Z' },
+    { ...base, id: '22222222-2222-2222-2222-222222222222', file: path.basename(await copyOf('feed-new.epub')), filename: 'Test Feed - new.epub', folder: '/A-pub Feeds', source: feedSource, onReader: true, deliveredAt: null, builtAt: '2026-01-02T00:00:00.000Z' }
   );
   await fs.writeFile(outboxFile, JSON.stringify(stored));
   const feedOff = await api('/api/outbox/on-reader', {

@@ -14,18 +14,19 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import JSZip from 'jszip';
 
 import { extractArticle } from './lib/extract.mjs';
 import { extractPdf } from './lib/pdf.mjs';
 import { buildEpub, buildImageEpub, safeFilename } from './lib/epub.mjs';
 import { PANEL, htmlToBlocks, renderBlocksToPages, renderPdfPages } from './lib/render.mjs';
-import { DraftStore } from './lib/drafts.mjs';
-import { AssetStore, normalizeForDevice } from './lib/assets.mjs';
-import { FeedStore, feedFilename } from './lib/feeds.mjs';
+import { normalizeForDevice } from './lib/assets.mjs';
+import { feedFilename } from './lib/feeds.mjs';
 import { BOOKS_FOLDER, FEED_FOLDER, NOTES_FOLDER } from './lib/folders.mjs';
-import { Outbox } from './lib/outbox.mjs';
-import { Removals } from './lib/removals.mjs';
+import { DiskBlobs, S3Blobs } from './lib/store/blobs.mjs';
+import { LOCAL_OWNER, SHARED_OWNER, databaseBackend, fileBackend } from './lib/store/backend.mjs';
+import { migrate, openPostgres } from './lib/store/db.mjs';
 import { mediaTypeFor, readChapter, readEpub, readEpubFile } from './lib/epubread.mjs';
 import { renderWebPage } from './lib/webread.mjs';
 import { pruneSummaries, summarize } from './lib/summary.mjs';
@@ -156,16 +157,71 @@ const DEFAULT_CONFIG = {
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
+const STATE_DIR = process.env.EPUB_DROP_STATE || ROOT;
+
+// ---------------------------------------------------------------- storage
+//
+// Where libraries live: files on disk (your Mac, or a simple hosted install),
+// or PostgreSQL plus file storage when DATABASE_URL is set (hosted for many
+// users). Each request runs as one owner, and the stores below always mean
+// that owner's: `outbox` inside a request is the requester's queue. Until
+// accounts arrive, there is one owner: "local" on your Mac, "shared" hosted.
+
+const backend = await openBackend();
+const DEFAULT_OWNER = HOSTED ? SHARED_OWNER : LOCAL_OWNER;
+const ownerContext = new AsyncLocalStorage();
+/** The current owner's stores. */
+const stores = () => backend.forOwner(ownerContext.getStore() || DEFAULT_OWNER);
+/** A stand-in that forwards to the current owner's store of that name. */
+function scoped(name) {
+  return new Proxy(
+    {},
+    {
+      get(_, prop) {
+        const target = stores()[name];
+        const value = target[prop];
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }
+  );
+}
+
 // Built EPUBs waiting to be sent. Persistent, because the reader is usually
 // connected later than the moment something was converted.
-const outbox = new Outbox(OUT_DIR);
+const outbox = scoped('outbox');
 // Deletions asked for while the reader was away, carried out on the next sync.
-const removals = new Removals(path.join(OUT_DIR, 'removals.json'));
+const removals = scoped('removals');
+const drafts = scoped('drafts');
+const assets = scoped('assets');
+const feeds = scoped('feeds');
 
-const STATE_DIR = process.env.EPUB_DROP_STATE || ROOT;
-const drafts = new DraftStore(path.join(STATE_DIR, 'drafts'));
-const assets = new AssetStore(path.join(STATE_DIR, 'assets'));
-const feeds = new FeedStore(path.join(STATE_DIR, 'feeds.json'));
+async function openBackend() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return fileBackend({ outDir: OUT_DIR, stateDir: STATE_DIR, configPath: CONFIG_PATH });
+
+  const db = openPostgres(url, { ssl: process.env.DATABASE_SSL ? process.env.DATABASE_SSL !== '0' : undefined });
+  const applied = await migrate(db);
+  if (applied.length) console.log(`  database: applied ${applied.join(', ')}`);
+
+  let blobs;
+  if (process.env.STORAGE_BUCKET) {
+    blobs = new S3Blobs({
+      endpoint: process.env.STORAGE_ENDPOINT,
+      bucket: process.env.STORAGE_BUCKET,
+      accessKeyId: process.env.STORAGE_ACCESS_KEY_ID,
+      secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY,
+      region: process.env.STORAGE_REGION || 'auto',
+      prefix: process.env.STORAGE_PREFIX || '',
+    });
+  } else {
+    // No bucket: files on this server's disk. Fine for trying the database
+    // locally, or on a Render plan with a disk; files vanish on a free plan.
+    const dir = path.join(STATE_DIR, 'files');
+    if (HOSTED) console.warn(`  storage: no STORAGE_BUCKET set, so files are kept on this server's disk (${dir}).`);
+    blobs = new DiskBlobs(dir);
+  }
+  return databaseBackend({ db, blobs });
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -178,15 +234,11 @@ const MIME = {
 // ---------------------------------------------------------------- config
 
 async function readConfig() {
-  try {
-    const raw = JSON.parse(await fs.readFile(CONFIG_PATH, 'utf8'));
-    // Earlier versions saved a folder for a device-browsing view that is gone;
-    // where each item goes is decided by what it is, so the value is dropped.
-    const { folder, ...config } = { ...DEFAULT_CONFIG, ...raw };
-    return config;
-  } catch {
-    return { ...DEFAULT_CONFIG };
-  }
+  const raw = await stores().settings.get();
+  // Earlier versions saved a folder for a device-browsing view that is gone;
+  // where each item goes is decided by what it is, so the value is dropped.
+  const { folder, ...config } = { ...DEFAULT_CONFIG, ...raw };
+  return config;
 }
 
 async function writeConfig(patch) {
@@ -199,10 +251,7 @@ async function writeConfig(patch) {
   next.imageScale = clamp(Number(next.imageScale) || 1, 1, 3);
   next.imageSplit = ['whole', 'halves', 'thirds'].includes(next.imageSplit) ? next.imageSplit : 'whole';
   next.imageFontSize = clamp(Number(next.imageFontSize) || 21, 12, 40);
-  // A fresh host (Render) starts without the data folder.
-  await fs.mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-  await fs.writeFile(CONFIG_PATH, `${JSON.stringify(next, null, 2)}\n`);
-  return next;
+  return stores().settings.set(next);
 }
 
 // ---------------------------------------------------------------- conversion
@@ -393,24 +442,20 @@ async function finishImagePages({ title, byline, lang, source, pages, folder = n
 
   await fs.mkdir(OUT_DIR, { recursive: true });
   const id = randomUUID();
-  const diskPath = path.join(OUT_DIR, `${id}-${filename}`);
-  await fs.writeFile(diskPath, buffer);
+  const stored = await outbox.saveEpub(id, filename, buffer);
 
-  // Keep the PNGs on disk too, so the UI can show what the reader will show
-  // without unzipping the EPUB on every preview request.
-  const pageDir = path.join(OUT_DIR, `${id}-pages`);
-  await fs.mkdir(pageDir, { recursive: true });
-  await Promise.all(
-    pages.map((page, i) => fs.writeFile(path.join(pageDir, `${String(i + 1).padStart(4, '0')}.png`), page.data))
-  );
+  // Keep the PNGs too, so the UI can show what the reader will show without
+  // unzipping the EPUB on every preview request.
+  const storedPages = await outbox.savePages(id, pages);
 
   await outbox.add({
     id,
     filename,
     title,
-    diskPath,
+    ...stored,
     size: buffer.length,
-    pageDir,
+    ...storedPages,
+    pagesSize: pages.reduce((n, page) => n + page.data.length, 0),
     pageCount: pages.length,
     folder,
     mode: 'images',
@@ -449,14 +494,13 @@ async function finish(article, item, warnings) {
 
   await fs.mkdir(OUT_DIR, { recursive: true });
   const id = randomUUID();
-  const diskPath = path.join(OUT_DIR, `${id}-${filename}`);
-  await fs.writeFile(diskPath, buffer);
+  const stored = await outbox.saveEpub(id, filename, buffer);
 
   await outbox.add({
     id,
     filename,
     title: article.title,
-    diskPath,
+    ...stored,
     size: buffer.length,
     // null means "whatever the Send controls are set to"; a note or a feed
     // carries its own destination instead.
@@ -557,7 +601,7 @@ async function checkFeedsForNew() {
         const latest = fetched.items.slice(0, feed.limit || 15);
         let have = new Set();
         if (edition) {
-          const summary = await summarize(edition).catch(() => null);
+          const summary = await summarize(edition, () => outbox.readEpub(edition)).catch(() => null);
           have = new Set((summary?.articles || []).map((a) => headlineKey(a.title)));
         }
         const builtAt = edition?.builtAt ? Date.parse(edition.builtAt) : 0;
@@ -644,10 +688,8 @@ async function refreshFeed(feed) {
   const built = await buildEpub(article);
   const filename = feedFilename(title);
 
-  await fs.mkdir(OUT_DIR, { recursive: true });
   const id = randomUUID();
-  const diskPath = path.join(OUT_DIR, `${id}-${filename}`);
-  await fs.writeFile(diskPath, built.buffer);
+  const stored = await outbox.saveEpub(id, filename, built.buffer);
 
   // A feed switched off in the Library stays off: its new edition inherits the
   // switch from the newest one before it.
@@ -665,7 +707,7 @@ async function refreshFeed(feed) {
     id,
     filename,
     title,
-    diskPath,
+    ...stored,
     size: built.buffer.length,
     // Feeds have their own folder, whatever the Send controls point at.
     folder: FEED_FOLDER,
@@ -752,7 +794,7 @@ const routes = {
     const summaries = [];
     for (const item of current) {
       try {
-        summaries.push(await summarize(item));
+        summaries.push(await summarize(item, () => outbox.readEpub(item)));
       } catch {
         // An unreadable file still shows up, just without a summary.
         summaries.push({ id: item.id, kind: item.source?.kind || 'file', title: item.title, builtAt: item.builtAt, articles: [], excerpt: '' });
@@ -792,7 +834,7 @@ const routes = {
     }
 
     try {
-      const book = await readEpub(entry.diskPath);
+      const book = await readEpub(await outbox.readEpub(entry));
       return json(200, {
         id: entry.id,
         kind: 'text',
@@ -812,7 +854,7 @@ const routes = {
 
     const index = Number(url.searchParams.get('n') || 0);
     try {
-      const book = await readEpub(entry.diskPath);
+      const book = await readEpub(await outbox.readEpub(entry));
       const chapter = await readChapter(book, index, {
         imageUrl: (internal) => `/out/${entry.id}/epub/${internal.split('/').map(encodeURIComponent).join('/')}`,
       });
@@ -915,17 +957,9 @@ const routes = {
     const written = await drafts.list();
     for (const draft of written) await drafts.remove(draft.id);
 
-    // Images pasted into drafts; nothing else refers to them once drafts go.
-    await fs.rm(path.join(STATE_DIR, 'assets'), { recursive: true, force: true });
-
-    // Built files the queue no longer knew about — older runs, interrupted
-    // builds. Only names this app writes are touched.
-    let stray = 0;
-    for (const name of await fs.readdir(OUT_DIR).catch(() => [])) {
-      if (!/^[0-9a-f-]{36}-(?:.+\.epub|pages)$|\.tmp$/i.test(name)) continue;
-      await fs.rm(path.join(OUT_DIR, name), { recursive: true, force: true });
-      stray++;
-    }
+    // Images pasted into drafts (nothing else refers to them once drafts go),
+    // and built files the queue no longer knew about.
+    const stray = await stores().clearFiles();
 
     return json(200, {
       ok: true,
@@ -990,14 +1024,13 @@ const routes = {
         const filename = bookFilename(book, safeFilename);
 
         const id = randomUUID();
-        const diskPath = path.join(OUT_DIR, `${id}-${filename}`);
-        await fs.writeFile(diskPath, buffer);
+        const stored = await outbox.saveEpub(id, filename, buffer);
 
         // Read the real spine length so the queue shows a chapter count rather
         // than a blank, and so the preview label is accurate.
         let chapters = null;
         try {
-          chapters = (await readEpub(diskPath)).spine.length;
+          chapters = (await readEpub(buffer)).spine.length;
         } catch {
           /* it validated as an EPUB above; a odd package just means no count */
         }
@@ -1007,7 +1040,7 @@ const routes = {
           filename,
           title: book.title || filename.replace(/\.epub$/, ''),
           author: book.author || '',
-          diskPath,
+          ...stored,
           size: buffer.length,
           // Books follow the Send controls like any other queued file.
           folder: null,
@@ -1156,7 +1189,7 @@ const routes = {
   // the files on disk saves hunting for them in Finder.
   'POST /api/reveal': async (req) => {
     const { what } = await body(req);
-    const targets = { drafts: path.join(ROOT, 'drafts'), out: OUT_DIR };
+    const targets = stores().folders || {};
     const target = targets[what];
     if (!target) return json(400, { error: 'Unknown folder.' });
     await fs.mkdir(target, { recursive: true });
@@ -1219,7 +1252,7 @@ const routes = {
 
       const targetFolder = entry.folder ? normalizePath(entry.folder) : folder;
       try {
-        await copyToVolume(volume, targetFolder, entry.filename, await fs.readFile(entry.diskPath));
+        await copyToVolume(volume, targetFolder, entry.filename, await outbox.readEpub(entry));
 
         const removedOld = await afterDelivery(entry, {
           label: volume.name,
@@ -1333,7 +1366,7 @@ const routes = {
       const targetFolder = entry.folder ? normalizePath(entry.folder) : folder;
       try {
         if (targetFolder !== '/') await ensureDir(host, targetFolder);
-        const buffer = await fs.readFile(entry.diskPath);
+        const buffer = await outbox.readEpub(entry);
 
         if (!knownNames.has(targetFolder)) {
           knownNames.set(targetFolder, new Set((await deletableNames(host, targetFolder)).keys()));
@@ -1453,7 +1486,16 @@ const DEVICE_ROUTES = new Set([
   'POST /api/reveal',
 ]);
 
-async function handle(req, res) {
+/** Whose library a request works on. Accounts (Phase 2) decide this per user. */
+function ownerFor(req) {
+  return DEFAULT_OWNER;
+}
+
+function handle(req, res) {
+  return ownerContext.run(ownerFor(req), () => handleRequest(req, res));
+}
+
+async function handleRequest(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const key = `${req.method} ${url.pathname}`;
   const ip = clientIp(req, TRUST_PROXY_HOPS);
@@ -1533,7 +1575,7 @@ async function handle(req, res) {
 
     const internal = decodeURIComponent(epubFileMatch[2]);
     try {
-      const book = await readEpub(entry.diskPath);
+      const book = await readEpub(await outbox.readEpub(entry));
       // Looked up as an exact archive entry, so a traversal path simply misses.
       const data = await readEpubFile(book, internal);
       if (!data) return send(res, 404, 'text/plain', 'Not found');
@@ -1554,7 +1596,7 @@ async function handle(req, res) {
     const entry = await outbox.get(readMatch[1]);
     if (!entry) return send(res, 404, 'text/plain', 'That item is no longer here.');
     try {
-      const html = await renderWebPage(entry, { hosted: HOSTED });
+      const html = await renderWebPage(entry, { hosted: HOSTED, load: () => outbox.readEpub(entry) });
       res.writeHead(200, {
         'content-type': MIME['.html'],
         'cache-control': 'no-store',
@@ -1577,11 +1619,12 @@ async function handle(req, res) {
   if (req.method === 'GET' && pageMatch) {
     const job = await outbox.get(pageMatch[1]);
     const index = Number(pageMatch[2]);
-    if (!job?.pageDir || index < 1 || index > job.pageCount) {
+    if (!(job?.pages || job?.pageDir) || index < 1 || index > job.pageCount) {
       return send(res, 404, 'text/plain', 'Not found');
     }
     try {
-      const data = await fs.readFile(path.join(job.pageDir, `${String(index).padStart(4, '0')}.png`));
+      const data = await outbox.readPage(job, index);
+      if (!data) return send(res, 404, 'text/plain', 'Not found');
       res.writeHead(200, { 'content-type': 'image/png', 'content-length': data.length, 'cache-control': 'no-store' });
       return res.end(data);
     } catch {
@@ -1598,7 +1641,7 @@ async function handle(req, res) {
   if (req.method === 'GET' && url.pathname.startsWith('/out/')) {
     const job = await outbox.get(url.pathname.slice('/out/'.length));
     if (!job) return send(res, 404, 'text/plain', 'Not found');
-    const data = await fs.readFile(job.diskPath);
+    const data = await outbox.readEpub(job);
     res.writeHead(200, {
       'content-type': MIME['.epub'],
       'content-disposition': `attachment; filename="${job.filename.replace(/"/g, '')}"`,
