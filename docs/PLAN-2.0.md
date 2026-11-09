@@ -115,6 +115,20 @@ check, headers present, pdfjs flag, no static file outside `public/`.
 
 ## 4. Phase 1 — Data layer for many users
 
+**Status: built 2026-11-09** (local `v2`). Stores sit on collections and blob
+storage (`lib/store/`): JSON files and folders on your Mac (unchanged paths),
+or PostgreSQL (`pg`, named migrations) plus an S3-compatible bucket (signed with
+`aws4fetch`) when `DATABASE_URL` is set. Each request runs as one owner.
+Shared feed and article fetching (`fetch_cache`), per-library limits
+(`lib/limits.mjs`, defaults until the Phase 3 Settings page), and Download all
+eBooks. Tests run on embedded PGlite, and on a real PostgreSQL via
+`TEST_DATABASE_URL`.
+
+*Changed from the draft below:* user content is one `records` table (owner,
+kind, id, JSON data) rather than a table per kind. It mirrors the JSON files,
+so one set of store code serves both backends, and stays SQLite-friendly for
+D1. Accounts (Phase 2) get proper tables.
+
 **Storage behind interfaces.** Replace the direct JSON-file classes (`Outbox`,
 `FeedStore`, `DraftStore`, `AssetStore`, `Removals`, config) with store
 interfaces that take an owner, with two implementations:

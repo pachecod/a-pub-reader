@@ -18,6 +18,10 @@ import { DiskBlobs, S3Blobs, ScopedBlobs, checkKey } from '../lib/store/blobs.mj
 import { PgCollection } from '../lib/store/collections.mjs';
 import { AppSettings, MIGRATIONS, fromPGlite, migrate } from '../lib/store/db.mjs';
 import { LOCAL_OWNER, checkOwner, databaseBackend, fileBackend } from '../lib/store/backend.mjs';
+import { MemoryFetchCache, PgFetchCache, sharedFetcher } from '../lib/store/fetchcache.mjs';
+import { DEFAULT_LIMITS, LimitError, checkLimits, resolveLimits } from '../lib/limits.mjs';
+import { hydrateItems } from '../lib/rss.mjs';
+import pg from 'pg';
 
 let pass = 0;
 let fail = 0;
@@ -115,6 +119,63 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const asset = await alice.assets.save(png, 'image/png');
 assert((await alice.assets.read(asset.name))?.length > 0, 'an editor image is saved and read');
 assert((await bob.assets.read(asset.name)) === null, "bob cannot read alice's image");
+
+console.log('\n== limits ==');
+const limits = resolveLimits({ items: 2, feeds: '1', storageMB: -5, junk: 9 });
+assert(limits.items === 2 && limits.feeds === 1 && limits.storageMB === DEFAULT_LIMITS.storageMB && !('junk' in limits), 'admin limits apply; invalid ones fall back to defaults');
+assert(!(await rejects(checkLimits(bob, limits, { items: 2 }))), 'an empty library has room');
+const fullFeeds = await rejects(checkLimits(alice, limits, { feeds: 1 }));
+assert(fullFeeds instanceof LimitError && fullFeeds.status === 403 && /up to 1 feed\./.test(fullFeeds.message), `the feed limit is named: "${fullFeeds?.message}"`);
+for (const n of [1, 2]) {
+  const key = `0b6cf5a8-2222-4c3e-9a51-00000000000${n}`;
+  await bob.outbox.add({ id: key, filename: `${n}.epub`, title: `${n}`, ...(await bob.outbox.saveEpub(key, `${n}.epub`, Buffer.alloc(10))), size: 600 * 1024 });
+}
+const fullItems = await rejects(checkLimits(bob, limits, { items: 1 }));
+assert(fullItems && /hold 2 items/.test(fullItems.message), 'the item limit is named');
+const fullStorage = await rejects(checkLimits(bob, resolveLimits({ storageMB: 1 }), { items: 1 }));
+assert(fullStorage && /full 1 MB/.test(fullStorage.message), 'the storage limit is named');
+await bob.usage.addBuilds(3, '2026-01-01');
+await bob.usage.addBuilds(2);
+await bob.usage.addBuilds(1);
+assert((await bob.usage.builds()) === 3 && (await bob.usage.builds('2026-01-01')) === 0, "today's builds are counted and old days dropped");
+const fullBuilds = await rejects(checkLimits(bob, resolveLimits({ buildsPerDay: 4 }), { builds: 2 }));
+assert(fullBuilds && /daily limit is 4/.test(fullBuilds.message), 'the daily build limit is named');
+assert((await alice.usage.builds()) === 0, 'build counts are per library');
+
+console.log('\n== shared fetching ==');
+for (const [label, cache] of [['database', new PgFetchCache(db)], ['memory', new MemoryFetchCache()]]) {
+  const shared = sharedFetcher(cache);
+  let loads = 0;
+  const load = async () => {
+    loads++;
+    await new Promise((r) => setTimeout(r, 20));
+    return { title: 'Feed', items: [loads] };
+  };
+  const [a, b] = await Promise.all([shared('feed:x', 60000, load), shared('feed:x', 60000, load)]);
+  const c = await shared('feed:x', 60000, load);
+  assert(loads === 1 && a.items[0] === 1 && b.items[0] === 1 && c.items[0] === 1, `${label}: a feed fetched once serves everyone`);
+  await new Promise((r) => setTimeout(r, 15));
+  await shared('feed:x', 10, load);
+  assert(loads === 2, `${label}: an expired copy is fetched again`);
+  const failing = await rejects(shared('feed:bad', 60000, async () => { throw new Error('down'); }));
+  assert(failing && (await cache.get('feed:bad', 60000)) === null, `${label}: a failure is not kept`);
+}
+await new PgFetchCache(db).prune(0);
+assert((await db.query('SELECT count(*)::int AS n FROM fetch_cache')).rows[0].n === 0, 'old cache entries are pruned');
+
+const articleStore = new Map();
+const articleCache = { get: async (k) => articleStore.get(k) ?? null, set: async (k, v) => articleStore.set(k, v) };
+articleStore.set('https://news.example/1', { hydrated: true, html: '<p>Full text from the cache</p>', author: 'Cached Author' });
+articleStore.set('https://news.example/2', { hydrated: false });
+const hydrated = await hydrateItems(
+  [
+    { title: 'One', link: 'https://news.example/1', html: '<p>teaser</p>', author: '' },
+    { title: 'Two', link: 'https://news.example/2', html: '<p>teaser two</p>', author: '' },
+  ],
+  { limit: 5, articleCache, extractArticle: () => { throw new Error('should not fetch'); } }
+);
+assert(hydrated[0].hydrated && /from the cache/.test(hydrated[0].html) && hydrated[0].author === 'Cached Author', 'an article in the cache is not fetched again');
+assert(!hydrated[1].hydrated && hydrated[1].html === '<p>teaser two</p>', 'a cached "no better than the teaser" keeps the teaser');
 
 await alice.clearFiles();
 assert(!(await fs.access(path.join(sandbox, 'files', 'users', 'alice')).then(() => true, () => false)), "clearing files removes the owner's folder");
@@ -243,6 +304,17 @@ if (process.env.TEST_DATABASE_URL) {
     assert(/Stored in Postgres/.test(page), 'its reading page renders');
     const saved = await (await fetch(`${base}/api/config`, { method: 'POST', headers, body: JSON.stringify({ includeImages: false }) })).json();
     assert(saved.includeImages === false, 'settings save to the database');
+    const direct = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+    await direct.connect();
+    await direct.query(`INSERT INTO app_settings (key, value) VALUES ('limits', '{"feeds": 1}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
+    const addFeed = (url) => fetch(`${base}/api/feeds/add`, { method: 'POST', headers, body: JSON.stringify({ url }) });
+    const firstFeed = await addFeed('https://feeds.example.com/one.xml');
+    const secondFeed = await addFeed('https://feeds.example.com/two.xml');
+    const secondBody = await secondFeed.json();
+    assert(firstFeed.ok && secondFeed.status === 403 && /up to 1 feed\./.test(secondBody.error || ''), `the admin's feed limit is enforced: "${secondBody.error}"`);
+    await direct.query("DELETE FROM app_settings WHERE key = 'limits'");
+    await direct.end();
+
     const wiped = await (await fetch(`${base}/api/remove-everything`, { method: 'POST', headers, body: JSON.stringify({ confirm: 'I Agree' }) })).json();
     assert(wiped.ok && wiped.items >= 1, 'remove everything works');
     assert((await (await fetch(`${base}/api/outbox`, { headers })).json()).items.length === 0, 'and leaves the library empty');

@@ -61,14 +61,26 @@ a reader on your home Wi-Fi, a card in your Mac or a synced folder on it, so the
 On reader switches, Sync Reader and reader status are hidden and those routes
 are off. Running it on your own computer is unchanged.
 
-`render.yaml` sets this up on [Render](https://render.com):
+On your own computer the library is files in this folder, as it always was;
+nothing else needs installing. Hosted, 2.0 keeps it in **PostgreSQL** (records)
+and an **S3-compatible bucket** (files: Backblaze B2 on Render, Cloudflare R2 on
+Cloudflare), so it survives restarts and redeploys and is ready for many users.
 
-1. Push the repository to GitHub.
-2. In Render: **New → Blueprint**, pick the repository.
-3. Enter a password for **APP_PASSWORD** when asked: at least 12 characters,
-   and not a common one, or the app refuses to start. The browser will ask for
-   it (any user name) before showing anything.
-4. Open the service's `onrender.com` address, on the Boox or anywhere else.
+`render.yaml` (on the `v2` branch) sets this up on [Render](https://render.com):
+
+1. In Backblaze B2, create a bucket and an application key for it. Note the
+   bucket's S3 endpoint (for example `https://s3.us-west-004.backblazeb2.com`).
+2. In Render: **New → Blueprint**, pick the repository and the `v2` branch.
+   Render creates the web service and a PostgreSQL database.
+3. Enter the values it asks for: **APP_PASSWORD** (at least 12 characters, and
+   not a common one, or the app refuses to start) and the four **STORAGE_**
+   settings from step 1. They live in Render, never in the repository.
+4. Open the service's `onrender.com` address, on the Boox or anywhere else. The
+   browser asks for the password (any user name) before showing anything.
+
+Both start on Render's free plans, which suit trying 2.0 out: the free database
+is deleted after 30 days and the free service sleeps when idle. For real use,
+change them to `starter` and `basic-256mb` in `render.yaml` (paid).
 
 Hosting is controlled by environment variables:
 
@@ -78,7 +90,11 @@ Hosting is controlled by environment variables:
 | `APP_PASSWORD` | The password for every page and request (HTTP Basic sign-in). At least 12 characters when listening publicly. Ten wrong tries lock that address out for 15 minutes. |
 | `TRUST_PROXY_HOPS` | How many proxies in front of the app add to `X-Forwarded-For` (default 1 when listening publicly, as on Render; 0 on this computer). |
 | `HOSTED=1` | Hosted mode without listening publicly (used by the tests). |
-| `EPUB_DROP_STATE`, `EPUB_DROP_OUT_DIR`, `EPUB_DROP_CONFIG` | Where the library, built books and settings are kept. |
+| `DATABASE_URL` | PostgreSQL to keep libraries in. Unset, the library is files on disk. Migrations run at startup. |
+| `DATABASE_SSL` | `1` or `0` to force TLS to the database on or off (normally worked out from the address). |
+| `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY` | An S3-compatible bucket for files, with `DATABASE_URL`. All four or none; without them files stay on the server's disk. |
+| `STORAGE_REGION`, `STORAGE_PREFIX` | The bucket's region (default `auto`) and a folder inside it for this install. |
+| `EPUB_DROP_STATE`, `EPUB_DROP_OUT_DIR`, `EPUB_DROP_CONFIG` | Where the library, built books and settings are kept as files. |
 
 `/healthz` answers without the password, for Render's health checks.
 
@@ -90,11 +106,20 @@ requests that change something must come from the app's own pages; request
 sizes are limited per route; and fetching and converting are rate limited.
 `npm test` includes `test/security.test.mjs`, which checks all of this.
 
-**Keeping your library.** Render's free plan keeps no files: the library starts
-empty again whenever the service restarts, is redeployed, or sleeps after 15
-minutes without visits (the first visit after that also takes a minute to wake
-it). To keep it, switch `render.yaml` to `plan: starter`, uncomment the disk, and
-point the three data variables at `/var/data` — Render charges for both.
+**Shared fetching.** Hosted, a feed that several libraries follow is fetched
+once every ten minutes at most, and each article's text is kept for six hours,
+shared by everyone; each library still builds its own edition. On your own
+computer, Refresh always fetches.
+
+**Limits.** Hosted, each library has limits so one cannot crowd out the rest:
+250 MB of eBooks, 500 items, 50 feeds and 200 things built a day (conversions,
+book downloads and feed editions). Reaching one says which, and what to do.
+The admin dashboard (a later phase) will let these be changed; there are none
+on your own computer.
+
+**Without a database.** Leave `DATABASE_URL` unset and a hosted install keeps
+its library as files on the server's disk, as 1.0 does: on Render's free plan
+that disk is wiped whenever the service restarts, redeploys or sleeps.
 
 ## The loop
 
@@ -581,6 +606,11 @@ lib/books.mjs     catalogue browsing and verified EPUB downloads
 lib/feeds.mjs     saved feeds and the refresh bookkeeping
 lib/outbox.mjs    the pending-send queue, persisted across restarts
 lib/epubread.mjs  reads a built EPUB back out again, for previewing
+lib/netguard.mjs  checks every user-supplied address before fetching it
+lib/security.mjs  headers, same-origin and Host checks, secrets, rate limits
+lib/limits.mjs    per-library limits when hosted
+lib/store/        storage: JSON files or PostgreSQL for records, disk or an
+                  S3-compatible bucket for files, one library per owner
 public/           UI (no build step)
 out/              generated EPUBs and page images
 drafts/           your drafts, one JSON per draft
@@ -594,10 +624,12 @@ assets/           images placed in drafts, content-addressed
 npm test
 ```
 
-424 assertions. The device layer runs against a mock CrossPoint firmware, so the
+Over 700 assertions. The device layer runs against a mock CrossPoint firmware, so the
 upload path is verified byte-exact without hardware. EPUBs are checked by
 unzipping and parsing every XML part; page images are checked by decoding the
-PNGs and sampling pixels, since a blank page is still a valid PNG.
+PNGs and sampling pixels, since a blank page is still a valid PNG. The
+database tests run on an embedded PostgreSQL; set `TEST_DATABASE_URL` to an
+empty PostgreSQL database to also run the whole server against it.
 
 ## Notes
 

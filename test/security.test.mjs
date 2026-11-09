@@ -156,6 +156,10 @@ assert(secretProblems({ APP_PASSWORD: 'short' }, { required: true }).some((p) =>
 assert(secretProblems({ APP_PASSWORD: 'aaaaaaaaaaaaaaaa' }, { required: true }).length === 1, 'a repeated-character password is refused');
 assert(secretProblems({ APP_PASSWORD: 'correct horse battery staple' }, { required: true }).length === 0, 'a long passphrase is fine');
 assert(secretProblems({}, { required: false }).length === 0, 'nothing is required on your own computer');
+const pw = { APP_PASSWORD: 'correct horse battery staple' };
+assert(secretProblems({ ...pw, STORAGE_BUCKET: 'b' }, { required: true }).some((p) => /half set up/.test(p)), 'half-configured file storage is refused');
+assert(secretProblems({ ...pw, STORAGE_ENDPOINT: 'https://s3', STORAGE_BUCKET: 'b', STORAGE_ACCESS_KEY_ID: 'k', STORAGE_SECRET_ACCESS_KEY: 'short' }, { required: true }).some((p) => /too short/.test(p)), 'a placeholder storage secret is refused');
+assert(secretProblems({ ...pw, STORAGE_ENDPOINT: 'https://s3', STORAGE_BUCKET: 'b', STORAGE_ACCESS_KEY_ID: 'k', STORAGE_SECRET_ACCESS_KEY: 'x'.repeat(31) + 'y' }, { required: true }).length === 0, 'complete file storage settings pass');
 const limiter = new RateLimiter({ windowMs: 1000, max: 3 });
 const results = [1, 2, 3, 4].map(() => limiter.hit('a', 0).ok);
 assert(results.join() === 'true,true,true,false', 'the fourth hit in a window is refused');

@@ -1,44 +1,73 @@
-# Render blueprint for A-Pub Reader, hosted as a library and reader.
+# Render blueprint for A-Pub Reader 2.0, hosted for many users.
 #
-# In Render: New → Blueprint → pick this repository. Render reads this file,
-# asks for APP_PASSWORD (the password the app will ask for), and deploys.
+# In Render: New → Blueprint → pick this repository and the v2 branch. Render
+# creates the web service and a PostgreSQL database, and asks for the values
+# marked `sync: false` (secrets are entered in Render, never kept in git).
 #
 # Hosted, the app cannot reach a reader on your home Wi-Fi, a card in your Mac
 # or a synced folder on it, so syncing is switched off; everything else —
-# feeds, files, links, books, writing, and reading in the browser — works.
+# feeds, files, links, books, writing, reading in the browser, and downloading
+# every eBook as one zip — works.
 #
-# The free plan keeps no files: the library starts empty again whenever the
-# service restarts, is redeployed, or sleeps after 15 minutes without visits.
-# To keep it, use a paid plan with a disk: change `plan: free` to
-# `plan: starter` and uncomment the disk block below (Render charges for both).
+# Storage: the library's records go in the database, and its files (EPUBs,
+# page images, editor images) in a Backblaze B2 bucket. Create a bucket and an
+# application key in B2 first; the endpoint is shown on the bucket's page
+# (for example https://s3.us-west-004.backblazeb2.com).
+#
+# Plans: both start free while 2.0 is being tried. Render's free database is
+# deleted after 30 days and the free web service sleeps after 15 minutes. For
+# real use, change the web service to `starter` and the database to
+# `basic-256mb` (paid; see Render's pricing).
 
 services:
   - type: web
-    name: a-pub-reader
+    name: a-pub-reader-v2
     runtime: node
     plan: free
-    buildCommand: npm ci
+    branch: v2
+    buildCommand: npm ci --omit=dev
     startCommand: node server.mjs
     healthCheckPath: /healthz
     envVars:
       # Kept in step with .node-version and package.json "engines".
       - key: NODE_VERSION
         value: "26.13.0"
+      - key: NODE_ENV
+        value: production
       # Listen publicly. This also turns on hosted mode and requires a password.
       - key: HOST
         value: 0.0.0.0
-      # Render prompts for this when the blueprint is first applied.
+      # The password the app asks for: at least 12 characters, not a common one.
       - key: APP_PASSWORD
         sync: false
-      # Where the library lives. On the free plan this is the service's own
-      # temporary disk; with the disk below, point all three at /var/data.
+      # The database below.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: a-pub-reader-db
+          property: connectionString
+      # Backblaze B2 (S3-compatible). Set all four, or none to keep files on
+      # the service's own disk (lost on restarts with the free plan).
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      # Lets one bucket hold more than one install, or other things.
+      - key: STORAGE_PREFIX
+        value: a-pub-reader
+      # Scratch space on the service's disk.
       - key: EPUB_DROP_STATE
         value: /opt/render/project/src/data
       - key: EPUB_DROP_OUT_DIR
         value: /opt/render/project/src/data/out
       - key: EPUB_DROP_CONFIG
         value: /opt/render/project/src/data/config.json
-    # disk:
-    #   name: library
-    #   mountPath: /var/data
-    #   sizeGB: 1
+
+databases:
+  - name: a-pub-reader-db
+    plan: free
+    databaseName: apub
+    user: apub

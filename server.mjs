@@ -22,7 +22,9 @@ import { extractPdf } from './lib/pdf.mjs';
 import { buildEpub, buildImageEpub, safeFilename } from './lib/epub.mjs';
 import { PANEL, htmlToBlocks, renderBlocksToPages, renderPdfPages } from './lib/render.mjs';
 import { normalizeForDevice } from './lib/assets.mjs';
-import { feedFilename } from './lib/feeds.mjs';
+import { feedFilename, normalizeUrl } from './lib/feeds.mjs';
+import { checkLimits, resolveLimits } from './lib/limits.mjs';
+import { ARTICLE_TTL_MS, FEED_TTL_MS, MemoryFetchCache, PgFetchCache, sharedFetcher } from './lib/store/fetchcache.mjs';
 import { BOOKS_FOLDER, FEED_FOLDER, NOTES_FOLDER } from './lib/folders.mjs';
 import { DiskBlobs, S3Blobs } from './lib/store/blobs.mjs';
 import { LOCAL_OWNER, SHARED_OWNER, databaseBackend, fileBackend } from './lib/store/backend.mjs';
@@ -194,6 +196,32 @@ const removals = scoped('removals');
 const drafts = scoped('drafts');
 const assets = scoped('assets');
 const feeds = scoped('feeds');
+
+// Hosted, feeds and articles that several libraries follow are fetched once
+// and shared (in the database when there is one). Not on your Mac.
+const fetchCache = backend.kind === 'database' ? new PgFetchCache(backend.db) : HOSTED ? new MemoryFetchCache() : null;
+const shared = sharedFetcher(fetchCache);
+/** fetchFeed, through the shared cache when hosted. */
+const fetchFeedShared = (url) => shared(`feed:${normalizeUrl(url) || url}`, FEED_TTL_MS, () => fetchFeed(url));
+const articleCache = fetchCache && {
+  get: (link) => fetchCache.get(`article:${link}`, ARTICLE_TTL_MS),
+  set: (link, value) => fetchCache.set(`article:${link}`, value),
+};
+if (fetchCache) setInterval(() => fetchCache.prune(ARTICLE_TTL_MS).catch(() => {}), 60 * 60 * 1000).unref();
+
+/**
+ * Hosted, check the current library has room before adding to it; throws a
+ * LimitError (403) naming the limit. No limits on your Mac.
+ */
+async function ensureRoom(adding) {
+  if (!HOSTED) return;
+  const limits = resolveLimits(await backend.settings.get('limits', {}));
+  await checkLimits(stores(), limits, adding);
+}
+/** Count things built today, for the daily limit. */
+async function countBuilds(n) {
+  if (HOSTED && n > 0) await stores().usage.addBuilds(n);
+}
 
 async function openBackend() {
   const url = process.env.DATABASE_URL;
@@ -440,7 +468,6 @@ async function finishImages(article, item, options, warnings) {
 async function finishImagePages({ title, byline, lang, source, pages, folder = null }, warnings) {
   const { filename, buffer } = await buildImageEpub({ title, byline, lang, source, pages });
 
-  await fs.mkdir(OUT_DIR, { recursive: true });
   const id = randomUUID();
   const stored = await outbox.saveEpub(id, filename, buffer);
 
@@ -492,7 +519,6 @@ async function finish(article, item, warnings) {
 
   const { filename, buffer, chapters } = await buildEpub(article);
 
-  await fs.mkdir(OUT_DIR, { recursive: true });
   const id = randomUUID();
   const stored = await outbox.saveEpub(id, filename, buffer);
 
@@ -597,7 +623,7 @@ async function checkFeedsForNew() {
       const feed = followed[next++];
       const edition = editions.find((e) => e.source?.feedId === feed.id);
       try {
-        const fetched = await fetchFeed(feed.url);
+        const fetched = await fetchFeedShared(feed.url);
         const latest = fetched.items.slice(0, feed.limit || 15);
         let have = new Set();
         if (edition) {
@@ -631,13 +657,15 @@ async function checkFeedsForNew() {
   return results;
 }
 
-let refreshAllRun = null;
+// A refresh-all in progress, per library.
+const refreshAllRuns = new Map();
 
 async function refreshTargets(targets) {
   const results = [];
   for (const feed of targets) {
     try {
       results.push(await refreshFeed(feed));
+      await countBuilds(1);
     } catch (err) {
       await feeds.update(feed.id, { lastError: err.message, lastRefreshedAt: new Date().toISOString() });
       results.push({ ok: false, id: feed.id, title: feed.title || feed.url, error: err.message });
@@ -656,7 +684,7 @@ async function refreshTargets(targets) {
  */
 async function refreshFeed(feed) {
   const steps = [];
-  const fetched = await fetchFeed(feed.url);
+  const fetched = await fetchFeedShared(feed.url);
   const title = feed.title?.trim() || fetched.title;
 
   if (!fetched.items.length) throw new Error('That feed currently has no items.');
@@ -665,6 +693,7 @@ async function refreshFeed(feed) {
   const items = feed.fullText
     ? await hydrateItems(fetched.items, {
         limit: feed.limit,
+        articleCache,
         extractArticle: (opts) => extractArticle({ ...opts, includeImages: false }),
       })
     : fetched.items.slice(0, feed.limit);
@@ -1011,8 +1040,8 @@ const routes = {
     const payload = await body(req);
     const wanted = Array.isArray(payload.books) ? payload.books : [];
     if (!wanted.length) return json(400, { error: 'No books selected.' });
+    await ensureRoom({ items: wanted.length, builds: wanted.length });
 
-    await fs.mkdir(OUT_DIR, { recursive: true });
     const results = [];
 
     for (const book of wanted) {
@@ -1050,6 +1079,7 @@ const routes = {
         });
 
         results.push({ ok: true, id, title: label, filename, size: buffer.length });
+        await countBuilds(1);
       } catch (err) {
         results.push({ ok: false, title: label, error: err.message });
       }
@@ -1069,12 +1099,13 @@ const routes = {
 
   'POST /api/feeds/add': async (req) => {
     const payload = await body(req);
+    await ensureRoom({ feeds: 1 });
     try {
       const { feed, added } = await feeds.add(payload);
       // Probe the feed straight away so a typo surfaces now, not on refresh.
       if (added) {
         try {
-          const fetched = await fetchFeed(feed.url);
+          const fetched = await fetchFeedShared(feed.url);
           const updated = await feeds.update(feed.id, {
             title: feed.title || fetched.title,
             lastItemCount: fetched.items.length,
@@ -1123,15 +1154,17 @@ const routes = {
     const targets = payload.id ? all.filter((f) => f.id === payload.id) : all;
 
     if (!targets.length) return json(400, { error: 'No feeds to refresh.' });
+    await ensureRoom({ builds: targets.length });
 
     // The page refreshes everything when it loads, so a reload — or a second
     // tab — mid-refresh would otherwise start another run alongside it and
     // build every edition twice. Later callers wait for the run in progress.
     if (!payload.id) {
-      refreshAllRun ??= refreshTargets(targets).finally(() => {
-        refreshAllRun = null;
-      });
-      const results = await refreshAllRun;
+      const owner = stores().owner;
+      if (!refreshAllRuns.has(owner)) {
+        refreshAllRuns.set(owner, refreshTargets(targets).finally(() => refreshAllRuns.delete(owner)));
+      }
+      const results = await refreshAllRuns.get(owner);
       return json(200, { folder: FEED_FOLDER, results, feeds: await feeds.list() });
     }
 
@@ -1297,6 +1330,7 @@ const routes = {
     const payload = await body(req);
     const items = Array.isArray(payload.items) ? payload.items : [];
     if (!items.length) return json(400, { error: 'No items to convert.' });
+    await ensureRoom({ items: items.length, builds: items.length });
 
     const config = await readConfig();
     const options = {
@@ -1317,6 +1351,7 @@ const routes = {
       const label = item.name || item.url || 'item';
       try {
         results.push({ ok: true, label, ...(await convertItem(item, options)) });
+        await countBuilds(1);
       } catch (err) {
         results.push({ ok: false, label, error: err.message });
       }
