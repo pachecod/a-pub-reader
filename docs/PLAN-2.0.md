@@ -53,6 +53,15 @@ accounts it does not need.
 
 ## 3. Phase 0 — Security baseline (do first, before any new feature)
 
+**Status: built 2026-11-09** (local `v2`). Node 26.13.0 pinned; DOMPurify
+3.4.17 (also the browser copy in `public/vendor/`) and Readability 0.6.0, with a
+clean `npm audit`; `lib/netguard.mjs` (SSRF guard on undici, pinned 8.12.3);
+`lib/security.mjs` (headers, CSP, same-origin, Host check, secrets, rate
+limits); per-route body limits and JSON-only bodies; chapters sanitized
+server-side; `test/security.test.mjs`. Left for Phase 2, when there are
+sessions and a database: `SameSite` session cookies and database-backed rate
+limits. Still to do: the Node release due 2026-11-11.
+
 Grounded in the Node.js 2025–26 security releases and WebXRIDE's hardening
 (`SECURITY_AUDIT.md`, its 2.8 → 3.8 security commits, `ad04079` "Pin Node
 24.22.1 for the October security release").

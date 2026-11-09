@@ -21,8 +21,9 @@ services:
     startCommand: node server.mjs
     healthCheckPath: /healthz
     envVars:
+      # Kept in step with .node-version and package.json "engines".
       - key: NODE_VERSION
-        value: "22"
+        value: "26.13.0"
       # Listen publicly. This also turns on hosted mode and requires a password.
       - key: HOST
         value: 0.0.0.0

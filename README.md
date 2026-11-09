@@ -34,7 +34,8 @@ ln -sf "$PWD/bin/epub-drop" /opt/homebrew/bin/epub-drop   # old name, still work
 ```
 
 Re-run that if you move the project. It resolves its own symlink, so the app can
-live anywhere. Requires Node.js; it installs dependencies on first run.
+live anywhere. Requires Node.js 26 (the version is pinned in `.node-version`);
+it installs dependencies on first run.
 
 Binds to `127.0.0.1` only. Nothing leaves your machine except fetching a URL you
 paste and uploading to your reader on the local network.
@@ -64,7 +65,8 @@ are off. Running it on your own computer is unchanged.
 
 1. Push the repository to GitHub.
 2. In Render: **New → Blueprint**, pick the repository.
-3. Enter a password for **APP_PASSWORD** when asked. The browser will ask for
+3. Enter a password for **APP_PASSWORD** when asked: at least 12 characters,
+   and not a common one, or the app refuses to start. The browser will ask for
    it (any user name) before showing anything.
 4. Open the service's `onrender.com` address, on the Boox or anywhere else.
 
@@ -73,11 +75,20 @@ Hosting is controlled by environment variables:
 | Variable | Meaning |
 |---|---|
 | `HOST` | Where to listen. Unset keeps it on this computer; `0.0.0.0` listens publicly, turns on hosted mode, and requires `APP_PASSWORD`. |
-| `APP_PASSWORD` | The password for every page and request (HTTP Basic sign-in). |
+| `APP_PASSWORD` | The password for every page and request (HTTP Basic sign-in). At least 12 characters when listening publicly. Ten wrong tries lock that address out for 15 minutes. |
+| `TRUST_PROXY_HOPS` | How many proxies in front of the app add to `X-Forwarded-For` (default 1 when listening publicly, as on Render; 0 on this computer). |
 | `HOSTED=1` | Hosted mode without listening publicly (used by the tests). |
 | `EPUB_DROP_STATE`, `EPUB_DROP_OUT_DIR`, `EPUB_DROP_CONFIG` | Where the library, built books and settings are kept. |
 
 `/healthz` answers without the password, for Render's health checks.
+
+**Protections.** Hosted, addresses you give the app (pages, feeds, images,
+books) may not point into the server's own network: private, loopback and
+cloud-metadata addresses are refused, including after redirects and however
+the address is written. Every page has a strict content security policy;
+requests that change something must come from the app's own pages; request
+sizes are limited per route; and fetching and converting are rate limited.
+`npm test` includes `test/security.test.mjs`, which checks all of this.
 
 **Keeping your library.** Render's free plan keeps no files: the library starts
 empty again whenever the service restarts, is redeployed, or sleeps after 15

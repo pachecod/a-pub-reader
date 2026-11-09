@@ -30,6 +30,16 @@ import { renderWebPage } from './lib/webread.mjs';
 import { pruneSummaries, summarize } from './lib/summary.mjs';
 import { discoverFeeds } from './lib/discover.mjs';
 import { explainHttpFailure } from './lib/httperror.mjs';
+import { blockedReason, configureNetGuard, safeFetch } from './lib/netguard.mjs';
+import {
+  RateLimiter,
+  appCsp,
+  baseHeaders,
+  clientIp,
+  localHostAllowed,
+  sameOrigin,
+  secretProblems,
+} from './lib/security.mjs';
 import { composeFeedHtml, fetchFeed, hydrateItems } from './lib/rss.mjs';
 import { CATALOGUES, bookFilename, downloadBook, fetchCatalogue } from './lib/books.mjs';
 import {
@@ -82,8 +92,50 @@ if (!LOOPBACK && !APP_PASSWORD) {
   );
   process.exit(1);
 }
-// PDFs arrive base64-encoded, which inflates them by a third.
-const MAX_BODY_BYTES = 96 * 1024 * 1024;
+// Listening publicly, or told it is production: refuse weak secrets rather
+// than run with them.
+const secretIssues = secretProblems(process.env, {
+  required: !LOOPBACK || process.env.NODE_ENV === 'production',
+});
+if (secretIssues.length) {
+  console.error(
+    `\n  Refusing to start with weak secrets:\n${secretIssues.map((p) => `    - ${p}`).join('\n')}\n` +
+      '  Set them in the host\'s environment settings (on Render: Environment), never in the repository.\n'
+  );
+  process.exit(1);
+}
+
+// Hosted, addresses that users give the app may not point into the server's
+// own network. On your own computer they may (a page on your home network).
+configureNetGuard({ allowPrivate: !HOSTED });
+
+// How many proxies in front of the app add to X-Forwarded-For. Render has one.
+const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS ?? (LOOPBACK ? 0 : 1)) || 0;
+
+// Request bodies: small by default; larger only where files arrive. PDFs and
+// images arrive base64-encoded, which inflates them by a third.
+const DEFAULT_BODY_BYTES = 1024 * 1024;
+const BODY_LIMITS = {
+  'POST /api/convert': 96 * 1024 * 1024,
+  'POST /api/assets': 32 * 1024 * 1024,
+  'POST /api/drafts/save': 8 * 1024 * 1024,
+  'POST /api/drafts/preview': 8 * 1024 * 1024,
+};
+
+// Rate limits, per client address. Wrong passwords always; when hosted, also
+// the routes that make the server fetch and convert things.
+const authFailures = new RateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+const heavyWork = new RateLimiter({ windowMs: 10 * 60 * 1000, max: 60 });
+const HEAVY_ROUTES = new Set([
+  'POST /api/convert',
+  'POST /api/books/queue',
+  'GET /api/books/browse',
+  'POST /api/feeds/add',
+  'POST /api/feeds/refresh',
+  'GET /api/feeds/check',
+  'GET /api/feeds/discover',
+]);
+const APP_CSP = appCsp();
 const FETCH_TIMEOUT_MS = 30000;
 
 const DEFAULT_CONFIG = {
@@ -228,8 +280,9 @@ async function convertItem(item, options) {
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
     let res;
     try {
-      res = await fetch(url, {
+      res = await safeFetch(url, {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        maxBytes: 15 * 1024 * 1024,
         redirect: 'follow',
         headers: {
           // Some sites serve a stub to unknown clients; a normal UA gets the article.
@@ -239,6 +292,8 @@ async function convertItem(item, options) {
         },
       });
     } catch (err) {
+      const blocked = blockedReason(err);
+      if (blocked) throw new Error(blocked);
       // The most likely reason a fetch fails here is that this Mac is joined to
       // the reader's own hotspot, which has no route to the internet.
       throw new Error(
@@ -281,7 +336,7 @@ async function loadRenderImage(src) {
   if (local) return local.data;
   if (!/^https?:/i.test(src)) return null;
   try {
-    const res = await fetch(src, { signal: AbortSignal.timeout(15000) });
+    const res = await safeFetch(src, { signal: AbortSignal.timeout(15000), maxBytes: 4 * 1024 * 1024 });
     if (!res.ok) return null;
     return Buffer.from(await res.arrayBuffer());
   } catch {
@@ -1399,11 +1454,28 @@ const DEVICE_ROUTES = new Set([
 async function handle(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const key = `${req.method} ${url.pathname}`;
+  const ip = clientIp(req, TRUST_PROXY_HOPS);
+  const https = TRUST_PROXY_HOPS > 0 && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+  for (const [name, value] of Object.entries(baseHeaders({ https }))) res.setHeader(name, value);
+  // Every page gets the app's policy; reading pages replace it with their own.
+  res.setHeader('content-security-policy', APP_CSP);
+
+  // On your own computer, only requests addressed to this computer: a web
+  // page cannot point its own name at 127.0.0.1 and read the library.
+  if (LOOPBACK && !localHostAllowed(req.headers.host)) {
+    return send(res, 403, 'text/plain', 'A-Pub Reader only answers requests addressed to this computer.');
+  }
 
   // For the host's health checks, which come without the password.
   if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, 'text/plain', 'ok');
 
+  if (APP_PASSWORD && authFailures.blocked(ip).blocked) {
+    res.setHeader('retry-after', String(authFailures.blocked(ip).retryAfter));
+    return send(res, 429, 'text/plain', 'Too many wrong passwords. Try again in a few minutes.');
+  }
   if (APP_PASSWORD && !authorized(req)) {
+    // A first visit asks without credentials; only a wrong password counts.
+    if (req.headers.authorization) authFailures.hit(ip);
     res.writeHead(401, {
       'www-authenticate': 'Basic realm="A-Pub Reader", charset="UTF-8"',
       'content-type': 'text/plain; charset=utf-8',
@@ -1411,6 +1483,21 @@ async function handle(req, res) {
     });
     return res.end('A-Pub Reader needs its password.');
   }
+
+  // Anything that changes something must come from the app's own pages, not
+  // from another site the browser happens to have open.
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !sameOrigin(req)) {
+    return send(res, 403, 'application/json', JSON.stringify({ error: 'That request came from another site and was refused.' }));
+  }
+
+  if (HOSTED && HEAVY_ROUTES.has(key)) {
+    const limit = heavyWork.hit(ip);
+    if (!limit.ok) {
+      res.setHeader('retry-after', String(limit.retryAfter));
+      return send(res, 429, 'application/json', JSON.stringify({ error: 'That is a lot of fetching and converting in a short time. Try again in a few minutes.' }));
+    }
+  }
+  req.bodyLimit = BODY_LIMITS[key] || DEFAULT_BODY_BYTES;
 
   if (HOSTED && DEVICE_ROUTES.has(key)) {
     return send(
@@ -1475,7 +1562,7 @@ async function handle(req, res) {
         // nothing from the book or another site, rather than trusting that
         // conversion stripped every script.
         'content-security-policy':
-          "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+          "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
       });
       return res.end(html);
     } catch (err) {
@@ -1519,7 +1606,7 @@ async function handle(req, res) {
       const { status, type, payload } = await route(req, url);
       return send(res, status, type, payload);
     } catch (err) {
-      return send(res, 500, 'application/json', JSON.stringify({ error: err.message }));
+      return send(res, err.status || 500, 'application/json', JSON.stringify({ error: err.message }));
     }
   }
 
@@ -1553,14 +1640,30 @@ function send(res, status, type, payload) {
   res.end(payload);
 }
 
+/** An error that carries the HTTP status to answer with. */
+const httpError = (status, message) => Object.assign(new Error(message), { status });
+
+/**
+ * A request's JSON body, within the size allowed for its route. Bodies must be
+ * sent as application/json: a plain form or text post from another site cannot
+ * set that type without the browser asking this server first, and it doesn't
+ * say yes.
+ */
 function body(req) {
+  const limit = req.bodyLimit || DEFAULT_BODY_BYTES;
   return new Promise((resolve, reject) => {
+    const declared = Number(req.headers['content-length']);
+    if (Number.isFinite(declared) && declared > limit) {
+      reject(httpError(413, `That is too large to send (the limit here is ${Math.round(limit / 1048576)} MB).`));
+      req.resume();
+      return;
+    }
     const chunks = [];
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
-        reject(new Error('Request too large.'));
+      if (size > limit) {
+        reject(httpError(413, `That is too large to send (the limit here is ${Math.round(limit / 1048576)} MB).`));
         req.destroy();
         return;
       }
@@ -1568,10 +1671,13 @@ function body(req) {
     });
     req.on('end', () => {
       if (!chunks.length) return resolve({});
+      if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) {
+        return reject(httpError(415, 'Requests must be sent as JSON.'));
+      }
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       } catch {
-        reject(new Error('Invalid JSON body.'));
+        reject(httpError(400, 'Invalid JSON body.'));
       }
     });
     req.on('error', reject);
