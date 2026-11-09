@@ -158,6 +158,7 @@ const DEFAULT_CONFIG = {
 };
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const STATE_DIR = process.env.EPUB_DROP_STATE || ROOT;
 
@@ -989,6 +990,15 @@ const routes = {
     // Images pasted into drafts (nothing else refers to them once drafts go),
     // and built files the queue no longer knew about.
     const stray = await stores().clearFiles();
+
+    // A wipe cannot be undone, so the log says when it happened and which
+    // browser asked for it.
+    console.log(
+      `  ${new Date().toLocaleString()}  Remove everything: ${plural(items.length, 'item')}, ` +
+        `${plural(followed.length, 'feed')}, ${plural(written.length, 'draft')}` +
+        `${fromDevice ? ', reader copies queued for removal' : ''}. ` +
+        `Browser: ${String(req.headers['user-agent'] || 'none').slice(0, 200)}`
+    );
 
     return json(200, {
       ok: true,

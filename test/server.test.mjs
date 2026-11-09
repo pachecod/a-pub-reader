@@ -602,6 +602,8 @@ try {
   // Two sent above, one never sent, and the item from the switch tests (sent).
   assert(wiped.body.items === 4, `sent and unsent items are both removed: ${wiped.body.items}`);
   assert(wiped.body.pending === 3, `only what reached the reader is queued for it: ${wiped.body.pending}`);
+  const wipeLog = appLog.join('').split('\n').find((line) => line.includes('Remove everything:')) || '';
+  assert(/4 items, .*reader copies queued for removal\. Browser: \S/.test(wipeLog), `the wipe is logged with its browser: "${wipeLog.trim()}"`);
   assert((await api('/api/outbox')).body.items.length === 0, 'the queue is empty');
   assert((await api('/api/feeds')).body.feeds.length === 0, 'no feeds are followed');
   assert((await api('/api/drafts')).body.drafts.length === 0, 'no drafts are left');
