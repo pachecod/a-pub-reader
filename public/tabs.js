@@ -68,8 +68,6 @@
     const tab = event.target.closest('.tab');
     if (!tab) return;
     show(tab.dataset.tab);
-    // Clicking Library, even when already on it, brings in the latest feeds.
-    if (tab.dataset.tab === 'read') window.epubDropFeeds?.refreshAll();
   });
 
   // Left/right arrows move between tabs when one has focus.

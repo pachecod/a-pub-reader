@@ -95,7 +95,12 @@
         <section id="read-feeds-section">
           <div class="row-between">
             <h2>Feed editions <span id="read-feeds-count" class="muted"></span></h2>
-            <button id="read-refresh" type="button" class="link">Refresh</button>
+            <!-- Feeds refresh only when asked. The count says how many newer
+                 articles the feeds have than the editions here. -->
+            <div class="row-tight">
+              <span id="feeds-new" class="new-count" hidden></span>
+              <button id="read-refresh" type="button" class="secondary">Refresh feeds</button>
+            </div>
           </div>
           <ul id="read-feeds" class="list shelf"></ul>
           <p id="read-feeds-more" class="shelf-more" hidden>

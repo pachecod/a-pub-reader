@@ -28,9 +28,6 @@
     banner: $('feeds-refreshing'),
   };
 
-  // Loading the page refreshes every feed, unless they were all refreshed this
-  // recently — coming back from a reading page should not fetch everything again.
-  const AUTO_REFRESH_AFTER_MS = 10 * 60 * 1000;
 
   let feeds = [];
   let folder = '/A-pub Feeds';
@@ -267,13 +264,9 @@
       working = false;
       el.banner.hidden = true;
       render();
+      // The editions just changed, so the Library's "new" counts are stale.
+      window.epubDropRead?.checkForNew?.();
     }
-  }
-
-  function needsRefresh() {
-    if (!feeds.length) return false;
-    const oldest = Math.min(...feeds.map((f) => (f.lastRefreshedAt ? Date.parse(f.lastRefreshedAt) : 0)));
-    return Date.now() - oldest > AUTO_REFRESH_AFTER_MS;
   }
 
   // ------------------------------------------------------------ find feeds
@@ -414,8 +407,8 @@
   });
   el.refreshAll.addEventListener('click', () => refreshFeeds());
 
-  // Clicking Library fetches the latest editions, whenever it was last done.
-  // A refresh already running is left to finish rather than started twice.
+  // The Library's Refresh feeds button fetches the latest editions. A refresh
+  // already running is left to finish rather than started twice.
   window.epubDropFeeds = {
     // Says whether a refresh started, so a caller with nothing to refresh can
     // fall back to just reloading its list.
@@ -426,7 +419,7 @@
     },
   };
 
-  load().then(() => {
-    if (needsRefresh()) refreshFeeds();
-  });
+  // Feeds refresh only when asked (Refresh feeds in the Library, Refresh all
+  // here); the Library checks quietly for new articles in the meantime.
+  load();
 })();

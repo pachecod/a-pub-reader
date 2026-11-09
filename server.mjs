@@ -473,6 +473,50 @@ async function afterDelivery(entry, { label, removeOld }) {
 
 // ---------------------------------------------------------------- feeds
 
+/** A headline reduced to its letters and digits, so small differences in quotes or spacing still match. */
+const headlineKey = (title) => String(title || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+
+/**
+ * How many articles each feed has that its current edition does not.
+ *
+ * Only reads the feeds — nothing is built, sent or saved. A refresh takes a
+ * feed's newest `limit` items, so those are compared, by headline, with the
+ * articles in the newest edition the app holds for that feed. An article
+ * counts as new only if it was also published after that edition was built:
+ * feeds drop old items and some never make it into an edition, which would
+ * otherwise surface older articles as "new". Undated ones go by headline.
+ */
+async function checkFeedsForNew() {
+  const followed = await feeds.list();
+  const editions = await outbox.list();
+  const results = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < followed.length) {
+      const feed = followed[next++];
+      const edition = editions.find((e) => e.source?.feedId === feed.id);
+      try {
+        const fetched = await fetchFeed(feed.url);
+        const latest = fetched.items.slice(0, feed.limit || 15);
+        let have = new Set();
+        if (edition) {
+          const summary = await summarize(edition).catch(() => null);
+          have = new Set((summary?.articles || []).map((a) => headlineKey(a.title)));
+        }
+        const builtAt = edition?.builtAt ? Date.parse(edition.builtAt) : 0;
+        const fresh = latest.filter(
+          (item) => !have.has(headlineKey(item.title)) && (!builtAt || !item.date || item.date.getTime() > builtAt)
+        );
+        results.push({ feedId: feed.id, title: feed.title || fetched.title, newCount: fresh.length, hasEdition: Boolean(edition) });
+      } catch (err) {
+        results.push({ feedId: feed.id, title: feed.title || feed.url, newCount: 0, error: err.message });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, followed.length) }, worker));
+  return results;
+}
+
 let refreshAllRun = null;
 
 async function refreshTargets(targets) {
@@ -944,6 +988,12 @@ const routes = {
     } catch (err) {
       return json(400, { error: err.message });
     }
+  },
+
+  // New articles waiting in each feed, without refreshing anything.
+  'GET /api/feeds/check': async () => {
+    const results = await checkFeedsForNew();
+    return json(200, { feeds: results, newCount: results.reduce((n, r) => n + r.newCount, 0) });
   },
 
   'POST /api/feeds/update': async (req) => {

@@ -315,14 +315,21 @@ arrives where an apostrophe was meant). An item's own headings are demoted below
 the chapter split, so a roundup post with internal headings stays one chapter
 instead of scattering subheadings through the table of contents.
 
-### Automatic refresh
+### Refreshing, and new articles
 
-Loading the main page refreshes every feed, with a **Refreshing Feeds** message
-under the tabs while it runs. The **Refresh** link beside Feed editions does the same. Clicking **Library** in the menu bar — even when
-already on it — refreshes them again, whenever they were last refreshed. If every feed was refreshed in the last ten
-minutes it is skipped, so coming back from a reading page does not fetch them
-all again. A second request while a refresh-all is running (a reload, another
-tab) waits for that run rather than starting its own, so nothing is built twice.
+Feeds refresh only when asked: **Refresh feeds** beside the Library's Feed
+editions, or **Refresh all** and each feed's **Refresh** on Add/Remove, with a
+**Refreshing Feeds** message while it runs. A second request while a refresh-all
+is running (a reload, another tab) waits for that run rather than starting its
+own, so nothing is built twice.
+
+Meanwhile the Library checks quietly — when it opens, after each refresh, and
+every 15 minutes — for articles the feeds have that their editions here do not
+(`/api/feeds/check`). It only reads the feeds; nothing is rebuilt or sent. The
+total shows as **N new** beside Refresh feeds, and each feed with something new
+shows its own count. An article counts as new if its headline is not in the
+edition and it was published after the edition was built, so older items a feed
+shuffles back into view are not counted.
 
 ### Find feeds
 

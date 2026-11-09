@@ -36,6 +36,7 @@
     forgetDevice: $('forget-device'),
     booksSection: $('read-books-section'),
     summary: $('library-summary'),
+    feedsNew: $('feeds-new'),
     addLinks: $('library-add'),
     layout: $('read-layout'),
     side: $('read-side'),
@@ -99,6 +100,7 @@
 
     const li = document.createElement('li');
     li.className = 'library-block';
+    if (summary.feedId) li.dataset.feedId = summary.feedId;
     li.appendChild(block);
     // A feed is dropped under Add/Remove → Feeds and kept off the reader with
     // its switch, so its edition gets no forget control of its own.
@@ -219,6 +221,7 @@
       el.books.replaceChildren(...books.map(draw));
       el.notes.replaceChildren(...notes.map(draw));
       el.feeds.replaceChildren(...feeds.map(draw));
+      showNewCounts();
 
       if (pendingEpub) {
         const wanted = items.find((i) => i.id === pendingEpub);
@@ -297,13 +300,68 @@
   el.forgetKeep.addEventListener('click', () => doForget(false));
   el.forgetDevice.addEventListener('click', () => doForget(true));
 
-  // Refresh fetches the latest feed editions, the same as clicking Library;
-  // the list reloads itself when that finishes. With no feeds to fetch (or a
-  // refresh already running) it just reloads the list.
+  // Refresh feeds fetches the latest feed editions; the list reloads itself
+  // when that finishes. With no feeds to fetch (or a refresh already running)
+  // it just reloads the list. Feeds never refresh on their own.
   el.refresh.title = 'Fetch the latest editions of every feed';
   el.refresh.addEventListener('click', () => {
     if (!window.epubDropFeeds?.refreshAll()) load();
   });
-  window.epubDropRead = { load, askForget };
-  load();
+
+  // ------------------------------------------------------------- new articles
+  //
+  // A quiet check, when the Library opens and every so often after: how many
+  // articles each feed has that its edition here does not. It only reads the
+  // feeds — nothing is rebuilt or sent — and shows a count beside Refresh feeds
+  // and on each feed with something new.
+
+  const CHECK_EVERY_MS = 15 * 60 * 1000;
+  let newCounts = new Map();
+  let checking = null;
+
+  function showNewCounts() {
+    const total = [...newCounts.values()].reduce((n, c) => n + c, 0);
+    el.feedsNew.hidden = total === 0;
+    el.feedsNew.textContent = `${total} new`;
+    el.feedsNew.title = `${total} newer article${total === 1 ? '' : 's'} in your feeds than in the editions here — Refresh feeds to get them`;
+
+    for (const li of el.feeds.querySelectorAll('.library-block[data-feed-id]')) {
+      const count = newCounts.get(li.dataset.feedId) || 0;
+      const head = li.querySelector('.reading-feed-head');
+      let chip = head?.querySelector('.new-count');
+      if (!count) {
+        chip?.remove();
+        continue;
+      }
+      if (!chip && head) {
+        chip = document.createElement('span');
+        chip.className = 'new-count';
+        head.querySelector('.reading-feed-meta')?.before(chip);
+      }
+      if (chip) {
+        chip.textContent = `${count} new`;
+        chip.title = `${count} newer article${count === 1 ? '' : 's'} than this edition`;
+      }
+    }
+  }
+
+  async function checkForNew() {
+    if (checking) return checking;
+    checking = (async () => {
+      try {
+        const { feeds } = await api('/api/feeds/check');
+        newCounts = new Map(feeds.map((f) => [f.feedId, f.newCount]));
+      } catch {
+        // Offline (the reader's hotspot, say): keep whatever was known.
+      } finally {
+        checking = null;
+        showNewCounts();
+      }
+    })();
+    return checking;
+  }
+
+  window.epubDropRead = { load, askForget, checkForNew };
+  load().then(checkForNew);
+  setInterval(checkForNew, CHECK_EVERY_MS);
 })();

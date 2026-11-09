@@ -470,6 +470,56 @@ try {
   const unknownSwitch = await api('/api/outbox/on-reader', { method: 'POST', body: JSON.stringify({ id: 'nope', on: true }) });
   assert(unknownSwitch.status === 404, 'switching an unknown item is a 404');
 
+  console.log('\n== new articles in feeds ==');
+  // A stand-in feed: refresh it, then publish another article and see it
+  // counted as new — without anything being rebuilt.
+  const feedItems = [
+    { title: 'First story from the stand-in feed', date: new Date(Date.now() - 3600e3) },
+    { title: 'Second story from the stand-in feed', date: new Date(Date.now() - 1800e3) },
+  ];
+  const rss = () =>
+    `<?xml version="1.0"?><rss version="2.0"><channel><title>Stand-in Feed</title><link>http://127.0.0.1/</link>` +
+    feedItems
+      .map((i) => `<item><title>${i.title}</title><link>http://127.0.0.1/${encodeURIComponent(i.title)}</link><pubDate>${i.date.toUTCString()}</pubDate><description>&lt;p&gt;${paragraph.repeat(2)}&lt;/p&gt;</description></item>`)
+      .join('') +
+    `</channel></rss>`;
+  const feedServer = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/rss+xml' });
+    res.end(rss());
+  });
+  await new Promise((r) => feedServer.listen(0, '127.0.0.1', r));
+  const feedUrl = `http://127.0.0.1:${feedServer.address().port}/feed.xml`;
+  try {
+    const added = await api('/api/feeds/add', { method: 'POST', body: JSON.stringify({ url: feedUrl, fullText: false, limit: 5 }) });
+    const standIn = added.body.feed;
+    const notBuilt = (await api('/api/feeds/check')).body.feeds.find((f) => f.feedId === standIn.id);
+    assert(notBuilt?.newCount === 2 && notBuilt.hasEdition === false, `before any refresh, all its articles are new: ${notBuilt?.newCount}`);
+
+    await api('/api/feeds/refresh', { method: 'POST', body: JSON.stringify({ id: standIn.id }) });
+    const fresh = (await api('/api/feeds/check')).body.feeds.find((f) => f.feedId === standIn.id);
+    assert(fresh?.newCount === 0, `right after a refresh, nothing is new: ${fresh?.newCount}`);
+
+    feedItems.push({ title: 'Third story, published since the refresh', date: new Date(Date.now() + 60e3) });
+    const outboxBefore = (await api('/api/outbox')).body.items.length;
+    const later = await api('/api/feeds/check');
+    const counted = later.body.feeds.find((f) => f.feedId === standIn.id);
+    assert(counted?.newCount === 1, `an article published since then counts as new: ${counted?.newCount}`);
+    assert(later.body.newCount >= 1, 'and in the total');
+    assert((await api('/api/outbox')).body.items.length === outboxBefore, 'checking builds nothing');
+
+    feedItems.push({ title: 'An older story that never made the edition', date: new Date(Date.now() - 7200e3) });
+    const older = (await api('/api/feeds/check')).body.feeds.find((f) => f.feedId === standIn.id);
+    assert(older?.newCount === 1, `an older article missing from the edition is not counted as new: ${older?.newCount}`);
+
+    // Removing a feed keeps its editions, so forget those too.
+    for (const item of (await api('/api/outbox')).body.items.filter((i) => i.source?.feedId === standIn.id)) {
+      await api('/api/outbox/remove', { method: 'POST', body: JSON.stringify({ id: item.id, fromDevice: false }) });
+    }
+    await api('/api/feeds/remove', { method: 'POST', body: JSON.stringify({ id: standIn.id }) });
+  } finally {
+    feedServer.close();
+  }
+
   console.log('\n== remove everything ==');
   // Both forgets above emptied the queue of delivered items, so put two back.
   for (const title of ['Wipe Me', 'Wipe Me Too']) {
