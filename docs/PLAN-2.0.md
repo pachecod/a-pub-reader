@@ -1,11 +1,11 @@
 # A-Pub Reader 2.0 — plan for review
 
-Status: **draft for review — no code has been changed.** Branch: `v2` (local).
+Status: **decisions made 2026-11-09 (two still open, §10) — no code has been changed.** Branch: `v2` (local).
 Written 2026-11-09 from: this codebase as of 1.0.0; the WebXRIDE repository
 (`pachecod/vr-hotspots-educational`, `main` at 2.8 plus its newer `2.8`, `3.6`
 and `3.8.x` branches); Node.js security releases through October 2026; and
-Cloudflare and Render documentation. Decisions that are yours to make are
-marked **Decide**.
+Cloudflare and Render documentation. Settled choices are marked *decided*;
+the full list is in §10.
 
 ---
 
@@ -58,13 +58,14 @@ Grounded in the Node.js 2025–26 security releases and WebXRIDE's hardening
 24.22.1 for the October security release").
 
 **Runtime and dependencies**
-- **Node 24 LTS, pinned.** Node 22 (what `render.yaml` uses now) reaches end of
-  life on 2027-04-30; 20 is already end of life. Commit `.node-version`
-  (`24.22.1`, matching WebXRIDE), set `engines` to `>=24.22.1 <25`, and set
-  Render's `NODE_VERSION` to 24. **Upgrade again after the Node release
-  pre-announced for 2026-11-11** (High severity, details pending).
-  *Decide:* 24 (safe, what WebXRIDE uses) or 26 (Active LTS since 2026-10-28,
-  longer life; needs a check that `@napi-rs/canvas` ships a build for it).
+- **Node 26 LTS, pinned** (*decided*). Node 26 has been Active LTS since
+  2026-10-28 and has the longest support ahead of it; Node 22 (what `render.yaml`
+  uses now) reaches end of life on 2027-04-30. Commit `.node-version` with the
+  current 26.x, set `engines` to `>=26 <27`, and set Render's `NODE_VERSION` to
+  26. First task: install Node 26 locally and run the full test suite, checking
+  that the native image library (`@napi-rs/canvas`) loads; it uses Node's stable
+  native-module interface, so it should. **Take the Node release pre-announced
+  for 2026-11-11** (High severity, details pending) as soon as it is out.
 - **DOMPurify 3.4.14 → latest.** `npm audit` today reports five new advisories
   (rated critical; they concern IN_PLACE and SAFE_FOR_TEMPLATES modes this app
   may not use — update regardless). Then a clean `npm audit` as a release gate.
@@ -114,17 +115,19 @@ interfaces that take an owner, with two implementations:
 **Database: PostgreSQL on Render** (as WebXRIDE), using `pg` and a small
 named-migration runner like WebXRIDE's `db/migrate.js` (no ORM). Tables, roughly:
 `users`, `identities` (password / Google), `sessions`, `email_tokens`,
-`groups` + `group_members` (optional, for classes), `feeds`, `library_items`
+`invite_codes`, `applications` (requests for an invite), `feeds`, `library_items`
 (today's outbox entries), `drafts`, `assets`, `removals`, `app_settings`
 (key/JSONB, as WebXRIDE), `feed_directory` (the admin-managed Find feeds list),
 `activity_log`, `error_log`. Keep the SQL portable to SQLite where cheap, so
 Cloudflare D1 stays possible (Phase 5).
 
-**Files: object storage** for EPUBs, PDF page images and draft images.
-*Decide:* **Cloudflare R2** (S3-compatible, no egress fees, and the natural fit
-if Cloudflare comes later) or **Backblaze B2** (what WebXRIDE already uses —
-one account for both apps). A Render persistent disk is the simplest but ties
-data to one machine and needs a paid plan.
+**Files: object storage** for EPUBs, PDF page images and draft images
+(*decided*): **Backblaze B2 for Render installs, Cloudflare R2 for Cloudflare
+installs.** Both speak the S3 interface, so the app has one storage driver,
+pointed at either service by environment variables (endpoint, bucket, key ID,
+secret key; all `sync: false` on Render). Local installs keep using folders on
+disk. Expected size: about 10–20 MB for a typical user, so roughly 1–2 GB for
+100 users.
 
 **Shared feed fetching.** Many users will follow the same feeds (NPR, BBC…).
 Fetch and parse each feed URL once per interval and share it; build editions
@@ -134,30 +137,41 @@ per user. Saves time and keeps the app polite to publishers.
 admin, so one account cannot fill the bucket.
 
 **Hosted vs reader sync.** Hosted users read in the browser (as today's hosted
-mode). Reader sync stays a local-app feature for now; per-user cloud sync to a
-Boox via each user's own Google Drive is a possible later addition (noted in §10).
+mode). Reader sync stays a local-app feature in 2.0; per-user cloud sync (for
+example to a Boox through each user's own Google Drive) is **deferred to a later
+release** (*decided*).
+
+**Download all my eBooks.** Instead, every user gets a **"Download all eBooks"**
+button in the Library that returns one `.zip` of all their generated EPUBs,
+built on the fly with `jszip` (already a dependency) and streamed so a large
+library does not sit in memory. It works locally too.
 
 ---
 
 ## 5. Phase 2 — Accounts and sign-in
 
 ### 2a. Admin-created accounts (first, the WebXRIDE approach)
-- Admin creates users (and optionally groups/classes), types a password or has
-  the server generate a readable one (WebXRIDE's `generateRandomPassword`
-  pattern), and hands it out; users can change it after signing in.
+- Admin creates users, types a password or has the server generate a readable
+  one (WebXRIDE's `generateRandomPassword` pattern), and hands it out; users can
+  change it after signing in. **Sign-in is username (or email) and password
+  only** (*decided*). There are no classes, teams or rosters, so WebXRIDE's class
+  password and roster sign-in are not carried over.
 - **Administrators are user accounts with an `admin` role**, not one shared
   `ADMIN_PASSWORD` (WebXRIDE's single shared, plaintext-compared admin password
   is a weakness worth leaving behind). A bootstrap: the first admin is created
   from env vars on first run.
-- Passwords hashed with **bcrypt cost 12** (WebXRIDE uses 10) or Argon2id.
-  *Decide:* WebXRIDE also stores passwords **reversibly encrypted** so admins
-  can look them up and export CSV. Recommendation: **don't** — show a generated
-  password once, and offer "reset password" instead. If you want lookup anyway,
-  it needs its own required secret (as WebXRIDE 3.8 enforces).
-- *Decide:* whether to copy WebXRIDE's **class password + roster** sign-in (pick
-  class → class password → pick your name → personal password). Useful for
-  classrooms with young students; most adult users would just use username/email
-  + password.
+- **Every password is hashed** with **scrypt from Node's built-in `crypto`**
+  (salted, memory-hard, recommended by OWASP, and no extra dependency). A hash is
+  one-way: the server can check a password but never recover it, which is
+  stronger than encryption.
+- **Admin lookup, only for passwords an admin set** (*decided*). When an admin
+  creates or resets a user's password, the server also keeps an encrypted copy
+  (AES-256-GCM) so the admin can look it up again or export it. The encryption
+  key is a required environment variable (`PASSWORD_LOOKUP_KEY`, set on Render,
+  never in git); without it, lookup is off. **As soon as the user sets their own
+  password, the encrypted copy is deleted**, and from then on only the hash
+  exists: no admin can ever see a password a user chose. The Users page shows
+  which accounts still have an admin-set password.
 
 ### Sessions
 - **Server-side sessions in the database**: random token in an
@@ -171,21 +185,42 @@ Boox via each user's own Google Drive is a possible later addition (noted in §1
   expiring link (token stored hashed) → account active.
 - Password reset by email, same token pattern. Generic responses so the forms
   do not reveal which emails have accounts.
-- **Email sending** through an API provider. *Decide:* Resend, Postmark or
-  SendGrid (all have free tiers; Resend and Postmark are simplest). Needs a
-  sending domain with SPF/DKIM.
-- Admin controls: registration on/off, optional **email-domain allowlist**
-  (e.g. only `@syr.edu`), optional approval queue, invite codes.
+- **Email sending through Resend** (*decided: cheapest*). Its free tier
+  covers 3,000 emails a month (100 a day), far more than verification and reset
+  emails for this app need; Postmark's free tier is 100 a month and SendGrid no
+  longer has a free plan. API key in `RESEND_API_KEY` on Render. Needs a
+  **sending domain you own** (for example a subdomain of danpacheco.com), with
+  the DNS records Resend gives you; to settle before 2b.
+
+**Registration settings** (*decided*), global switches on the admin Settings page:
+
+| Switch | Default | When on |
+|---|---|---|
+| **Invite code required** | Off (open registration) | The sign-up form asks for an invite code. Visitors without one see an **"Apply for an invite"** form (name, email, a line about why). |
+| **New accounts need approval** | On | New accounts wait in a queue until an admin approves them; the user is told so and emailed when approved. Turn it off and anyone can register and start at once. |
+
+- **Invite codes**: the admin generates codes on an Invites page, each with an
+  optional label, number of uses (single-use by default) and expiry, and can
+  revoke them. The page shows who used each code.
+- **Applications**: the admin sees requests for invites, and approving one
+  generates a code and emails it to the applicant; declining sends nothing.
+- Google sign-in follows the same switches.
 
 ### 2c. Google sign-in
 - OpenID Connect authorization-code flow with PKCE, `state` and `nonce`, from a
   Google Cloud OAuth client (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in
   Render's environment).
 - Links to an existing account when Google's verified email matches; users can
-  have both a password and Google. The domain allowlist applies here too.
-- Implemented directly (a few hundred lines) or with a small, well-maintained
-  library. *Decide:* hand-rolled with `openid-client`, or a fuller auth library
-  such as better-auth.
+  have both a password and Google. The invite and approval switches apply here
+  too.
+- **Auth approach** (*decided: easiest that stays secure*): small, standard
+  pieces rather than a framework. Node's built-in `crypto` for password hashing,
+  tokens and encryption; **`openid-client`** (widely used, certified OpenID
+  implementation) for Google; sessions in the database. A full auth framework
+  such as better-auth would bring its own database schema and routing, which
+  fights this app's plain `node:http` server and its local file mode, and would
+  still need custom code for admin-set password lookup and the invite and
+  approval rules. Each piece gets tests in `test/security.test.mjs`.
 
 ### Local mode
 Accounts are off by default on your Mac (single user, as today). They can be
@@ -203,9 +238,10 @@ static folder.
 | Page | Purpose | From WebXRIDE |
 |---|---|---|
 | **Overview** | Counts (users, active this week, items, storage), recent sign-ups, warnings | `admin.html` |
-| **Users** | Create, edit, disable, delete; reset password; roles; groups/classes; CSV import/export; see a user's library size | `admin-users` (+ roster) |
+| **Users** | Create, edit, disable, delete; approve waiting accounts; reset password; look up an admin-set password; roles; CSV import/export; see a user's library size | `admin-users` |
+| **Invites** | Generate, label and revoke invite codes; review applications for an invite | new |
 | **Find feeds** | Add, edit, reorder, remove the publisher list and topics; live check of each URL — the roadmap item | new (replaces `lib/discover.mjs` list) |
-| **Settings** | Registration on/off, domain allowlist, per-user limits, default feeds for new users, analytics on/off | "Editor Settings" + `app_settings` |
+| **Settings** | Invite code required, new accounts need approval, per-user limits, default feeds for new users, analytics on/off | "Editor Settings" + `app_settings` |
 | **Legal pages** | Edit Terms and Privacy (needed once there are accounts and analytics) | `admin-legal` |
 | **System text** | Edit welcome and other interface copy | `admin-system-text` |
 | **Usage** | GA4 numbers (via the GA4 Data API), storage per user, conversions, feed fetch health | `origin/3.6` `admin-usage` |
@@ -213,12 +249,13 @@ static folder.
 | **Error log** | Server and client errors | `origin/3.6` `admin-error-log` |
 
 Not carried over (VR-specific): templates, submissions/review inbox, common
-assets, snippets/Ridey AI, hosted pages. *Decide:* **Billing** (Stripe plans per
-group) — leave out unless you intend to charge.
+assets, snippets/Ridey AI, hosted pages, and **billing** (*decided: left out
+for now*).
 
-*Decide:* a **"view as user" peek** (WebXRIDE's `admin-user-peek`) is handy for
-support but is a privacy question for a personal library. Recommendation: show
-counts and sizes only, unless the user grants access.
+**No "view as user" peek** (*decided*). For each user the admin sees counts and
+sizes only (feeds, books, notes, storage used, last sign-in), not titles or
+contents. A personal library is private, and counts are enough to spot a
+problem or a full account.
 
 ---
 
@@ -231,9 +268,10 @@ As WebXRIDE (`lib/analytics-config.js`, `analytics-html-inject.js`, commit
   suppressed on localhost.
 - The standard gtag snippet in the main page and reading pages, served by the
   server so the switch takes effect; CSP updated for Google's hosts.
-- **Consent.** WebXRIDE has no consent banner. Recommendation: add one (and
-  Google's Consent Mode), and mention analytics in the Privacy page —
-  especially with students and possible EU visitors. *Decide.*
+- **Consent banner** (*decided: yes*). WebXRIDE has none. Analytics stays off
+  until a visitor accepts, using Google's Consent Mode; declining is as easy as
+  accepting, the choice is remembered, and it can be changed from a link in the
+  footer. The Privacy page explains it.
 - Do not send personal data (no emails or user IDs in events); optional custom
   events: item added, feed refreshed, reading page opened.
 - Usage page in the dashboard through the GA4 Data API with a service account
@@ -249,11 +287,19 @@ As WebXRIDE (`lib/analytics-config.js`, `analytics-html-inject.js`, commit
   with every secret `sync: false` (filled in on Render, never in git): session
   secret, first-admin credentials, email API key, Google OAuth client, GA IDs,
   object-storage keys.
-- `/healthz` health check (exists), `NODE_ENV=production`, Node 24.
-- **Costs** (*Decide* plan levels): free web + free Postgres works for trying it
-  (cold starts, and Render's free Postgres expires after a period); a real
-  deployment wants a paid web instance and a paid Postgres, plus object storage
-  (R2/B2: pennies at this scale).
+- `/healthz` health check (exists), `NODE_ENV=production`, Node 26, files in B2.
+- **Costs** (*still open*). Render charges separately for the app (web service)
+  and the database, each at a size you pick. Approximate tiers, to confirm on
+  Render's pricing page:
+
+  | | Free | Paid starting point |
+  |---|---|---|
+  | **Web service** | Sleeps after 15 minutes idle, ~1 minute to wake | Starter, about $7/month: always on, 512 MB memory. Standard, about $25/month, 2 GB, if large PDF conversions run out of memory |
+  | **Postgres** | Deleted after 30 days | Basic, about $6/month: kept, backed up |
+
+  Recommendation: free tiers while building and testing 2.0, then **Starter web
+  + Basic Postgres (about $13/month)** when real users arrive, plus B2 at
+  pennies.
 
 ### Cloudflare (explore)
 Findings: plain **Workers** cannot run this app's conversion core — the native
@@ -283,12 +329,12 @@ option 2 open without committing to it.
 
 | Step | What | Rough size |
 |---|---|---|
-| 0 | Security baseline (Node 24, DOMPurify, SSRF guard, headers, limits, tests) | 2–3 days |
-| 1 | Store interfaces; Postgres + migrations; object storage; owners on everything; shared feed fetching | 5–8 days |
-| 2a | Users, roles, admin-created accounts, sessions, sign-in UI | 3–4 days |
+| 0 | Security baseline (Node 26, DOMPurify, SSRF guard, headers, limits, tests) | 2–3 days |
+| 1 | Store interfaces; Postgres + migrations; B2/R2 storage driver; owners on everything; shared feed fetching; Download all eBooks | 5–8 days |
+| 2a | Users, roles, admin-created accounts, admin-set password lookup, sessions, sign-in UI | 3–4 days |
 | 3 | Admin dashboard: Overview, Users, Find feeds, Settings, Legal, System text | 4–6 days |
-| 4 | Google Analytics + consent + Privacy text | 1–2 days |
-| 2b | Self-registration, email verification, password reset | 2–3 days |
+| 4 | Google Analytics + consent banner + Privacy text | 1–2 days |
+| 2b | Self-registration, email verification, password reset, invite codes, applications, approval queue | 3–4 days |
 | 2c | Google sign-in | 1–2 days |
 | 3+ | Usage, Activity, Error log pages | 2–3 days |
 | 5 | Render blueprint for 2.0; Cloudflare Containers spike | 2–3 days |
@@ -298,20 +344,26 @@ passing its current tests throughout.
 
 ---
 
-## 10. Decisions for you
+## 10. Decisions
 
-1. **Node 24 or 26** for 2.0.
-2. **Object storage: R2 or B2** (or a Render disk to start).
-3. **Reversible passwords** for admin lookup (WebXRIDE does it) — recommend no.
-4. **Classroom sign-in** (class password + roster) — copy it, or plain username/email + password?
-5. **Who can register**: open, email-domain allowlist, invite code, or admin approval.
-6. **Email provider**: Resend, Postmark or SendGrid; and the sending domain.
-7. **Auth library**: hand-rolled with `openid-client` + bcrypt, or a fuller library.
-8. **Analytics consent banner** — recommend yes.
-9. **Billing** — leave out?
-10. **Admin "view as user"** — counts only, or full peek?
-11. **Hosted reader sync** later (e.g. each user's Google Drive for a Boox)?
-12. **Render plan levels** for the 2.0 service and database.
+Decided 2026-11-09:
+
+1. **Node 26** LTS.
+2. **Storage: B2 for Render installs, R2 for Cloudflare installs**, through one S3 driver.
+3. **Admin can look up only passwords an admin set**, encrypted with a key from the environment and deleted once the user picks their own; user-chosen passwords are hashed and never visible.
+4. **Username/email + password only**; no classes, teams or rosters.
+5. **Open registration**, with global admin switches for **invite code required** (with invite generation and an apply-for-invite form) and **new accounts need approval** (on to start).
+6. **Resend** for email (cheapest); sending domain to pick before 2b.
+7. **Small standard pieces**: Node `crypto` (scrypt), `openid-client`, database sessions.
+8. **Consent banner**: yes.
+9. **Billing**: left out for now.
+10. **No "view as user"**: counts and sizes only.
+11. **Hosted reader sync deferred** to a later release; **Download all eBooks** (one zip) added to 2.0.
+
+Still open:
+
+12. **Render sizes** (see §8): free while building, then Starter web + Basic Postgres (about $13/month) when real users arrive?
+13. **Sending domain** for email (needed by Phase 2b).
 
 ---
 
