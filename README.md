@@ -574,6 +574,11 @@ PNGs and sampling pixels, since a blank page is still a valid PNG.
   discards queued EPUBs; the index notices and drops those entries.
 - The reader is 2.4 GHz only, and must be on the same network as this Mac.
 
+## Future plans
+
+Planned but not built yet — such as letting an administrator sign in and manage
+the Find feeds list — are kept in [ROADMAP.md](ROADMAP.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Copyright © 2026 Dan Pacheco ([danpacheco.com](https://danpacheco.com)).
