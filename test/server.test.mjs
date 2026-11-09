@@ -504,6 +504,10 @@ try {
     const later = await api('/api/feeds/check');
     const counted = later.body.feeds.find((f) => f.feedId === standIn.id);
     assert(counted?.newCount === 1, `an article published since then counts as new: ${counted?.newCount}`);
+    assert(
+      counted?.articles?.[0]?.title === 'Third story, published since the refresh' && /^http:\/\/127\.0\.0\.1\//.test(counted.articles[0].link || ''),
+      'and the check names it, with its link, for the Library to list'
+    );
     assert(later.body.newCount >= 1, 'and in the total');
     assert((await api('/api/outbox')).body.items.length === outboxBefore, 'checking builds nothing');
 

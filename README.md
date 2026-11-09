@@ -329,7 +329,10 @@ every 15 minutes — for articles the feeds have that their editions here do not
 total shows as **N new** beside Refresh feeds, and each feed with something new
 shows its own count. An article counts as new if its headline is not in the
 edition and it was published after the edition was built, so older items a feed
-shuffles back into view are not counted.
+shuffles back into view are not counted. The new articles themselves are listed at the
+top of their feed's box, each tagged **New** and marked *not in this edition
+yet*; their headlines open on the publisher's site until a refresh brings them
+into the edition.
 
 ### Find feeds
 

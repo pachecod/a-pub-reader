@@ -621,6 +621,24 @@ a { color: var(--accent); }
 .new-count[hidden] { display: none; }
 @media (prefers-color-scheme: dark) { .new-count { color: #10131a; } }
 .reading-feed-head .new-count { margin-left: auto; }
+
+/* New articles not in the edition yet, at the top of a feed's box. */
+.reading-new { border-bottom: 1px dashed var(--line-strong); }
+.reading-article.is-new .reading-article-title { display: inline; }
+.reading-article.is-new .reading-byline { font-style: italic; }
+.new-tag {
+  display: inline-block;
+  margin-right: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font: 700 0.62rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: 0.2em;
+}
+@media (prefers-color-scheme: dark) { .new-tag { color: #10131a; } }
 #read-refresh { padding: 0.3rem 0.75rem; font-size: 0.82rem; }
 
 /* Library sections drawn for reading; books and notes carry the forget × in

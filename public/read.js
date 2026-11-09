@@ -317,7 +317,45 @@
 
   const CHECK_EVERY_MS = 15 * 60 * 1000;
   let newCounts = new Map();
+  // The new articles themselves, per feed: listed at the top of its box, tagged
+  // New, until a refresh brings them into the edition.
+  let newArticles = new Map();
   let checking = null;
+
+  const shortDate = (iso) =>
+    iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+  /** The not-yet-fetched articles at the top of a feed's box. */
+  function newList(articles) {
+    const list = document.createElement('ol');
+    list.className = 'reading-articles reading-new';
+    list.setAttribute('aria-label', 'New articles, not in this edition yet');
+    for (const article of articles) {
+      const li = document.createElement('li');
+      li.className = 'reading-article is-new';
+      const title = document.createElement(article.link ? 'a' : 'span');
+      title.className = 'reading-article-title';
+      title.textContent = article.title;
+      if (article.link) {
+        // Not in an edition yet, so it opens on the publisher's site.
+        title.href = article.link;
+        title.target = '_blank';
+        title.rel = 'noreferrer noopener';
+      }
+      const tag = document.createElement('span');
+      tag.className = 'new-tag';
+      tag.textContent = 'New';
+      li.append(tag, title);
+      const meta = document.createElement('p');
+      meta.className = 'reading-byline';
+      meta.textContent = [article.author, shortDate(article.date), 'not in this edition yet — Refresh feeds to add it']
+        .filter(Boolean)
+        .join(' · ');
+      li.appendChild(meta);
+      list.appendChild(li);
+    }
+    return list;
+  }
 
   function showNewCounts() {
     const total = [...newCounts.values()].reduce((n, c) => n + c, 0);
@@ -329,6 +367,11 @@
       const count = newCounts.get(li.dataset.feedId) || 0;
       const head = li.querySelector('.reading-feed-head');
       let chip = head?.querySelector('.new-count');
+      // The new headlines themselves, above the edition's articles.
+      li.querySelector('.reading-new')?.remove();
+      const fresh = newArticles.get(li.dataset.feedId) || [];
+      if (fresh.length) li.querySelector('.reading-articles')?.before(newList(fresh));
+
       if (!count) {
         chip?.remove();
         continue;
@@ -351,6 +394,7 @@
       try {
         const { feeds } = await api('/api/feeds/check');
         newCounts = new Map(feeds.map((f) => [f.feedId, f.newCount]));
+        newArticles = new Map(feeds.map((f) => [f.feedId, f.articles || []]));
       } catch {
         // Offline (the reader's hotspot, say): keep whatever was known.
       } finally {

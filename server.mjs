@@ -507,7 +507,20 @@ async function checkFeedsForNew() {
         const fresh = latest.filter(
           (item) => !have.has(headlineKey(item.title)) && (!builtAt || !item.date || item.date.getTime() > builtAt)
         );
-        results.push({ feedId: feed.id, title: feed.title || fetched.title, newCount: fresh.length, hasEdition: Boolean(edition) });
+        results.push({
+          feedId: feed.id,
+          title: feed.title || fetched.title,
+          newCount: fresh.length,
+          hasEdition: Boolean(edition),
+          // The new articles themselves, for the Library to list as not yet in
+          // the edition. Only http(s) links are passed on.
+          articles: fresh.map((item) => ({
+            title: String(item.title || '').trim(),
+            link: /^https?:\/\//i.test(item.link || '') ? item.link : null,
+            date: item.date ? item.date.toISOString() : null,
+            author: item.author || '',
+          })),
+        });
       } catch (err) {
         results.push({ feedId: feed.id, title: feed.title || feed.url, newCount: 0, error: err.message });
       }
