@@ -160,7 +160,9 @@ a { color: var(--accent); }
 @media (max-width: 480px) {
   .brand { display: none; }
   .bar { gap: 0.4rem; padding: 0 0.5rem; }
-  .menu a { padding: 0 0.4rem; }
+  .menu a { padding: 0 0.32rem; font-size: 0.8rem; }
+  .bar-actions { gap: 0.25rem; }
+  .bar-button { padding: 0.35rem 0.4rem; }
 }
 
 .page {

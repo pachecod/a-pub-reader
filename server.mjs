@@ -27,6 +27,7 @@ import { Outbox } from './lib/outbox.mjs';
 import { Removals } from './lib/removals.mjs';
 import { mediaTypeFor, readChapter, readEpub, readEpubFile } from './lib/epubread.mjs';
 import { renderWebPage } from './lib/webread.mjs';
+import { pruneSummaries, summarize } from './lib/summary.mjs';
 import { discoverFeeds } from './lib/discover.mjs';
 import { explainHttpFailure } from './lib/httperror.mjs';
 import { composeFeedHtml, fetchFeed, hydrateItems } from './lib/rss.mjs';
@@ -616,6 +617,34 @@ const routes = {
       })
     );
     return json(200, { devices: checked });
+  },
+
+  /**
+   * What there is to read, for the Read tab: every item, newest first, with
+   * only a feed's newest edition (as in the Library), each with its summary —
+   * a feed's articles, a book's description and cover, a note's opening.
+   */
+  'GET /api/reading': async () => {
+    const items = await outbox.list();
+    pruneSummaries(items.map((i) => i.id));
+    const seenFeeds = new Set();
+    const current = items.filter((i) => {
+      const feedId = i.source?.feedId;
+      if (!feedId) return true;
+      if (seenFeeds.has(feedId)) return false;
+      seenFeeds.add(feedId);
+      return true;
+    });
+    const summaries = [];
+    for (const item of current) {
+      try {
+        summaries.push(await summarize(item));
+      } catch {
+        // An unreadable file still shows up, just without a summary.
+        summaries.push({ id: item.id, kind: item.source?.kind || 'file', title: item.title, builtAt: item.builtAt, articles: [], excerpt: '' });
+      }
+    }
+    return json(200, { items: summaries });
   },
 
   // The pending queue, so the page can show it after a reload or a restart.
@@ -1373,7 +1402,7 @@ async function handle(req, res) {
     const entry = await outbox.get(readMatch[1]);
     if (!entry) return send(res, 404, 'text/plain', 'That item is no longer here.');
     try {
-      const html = await renderWebPage(entry, { hosted: HOSTED });
+      const html = await renderWebPage(entry, { hosted: HOSTED, from: url.searchParams.get('from') });
       res.writeHead(200, {
         'content-type': MIME['.html'],
         'cache-control': 'no-store',

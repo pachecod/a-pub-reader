@@ -16,6 +16,7 @@
   const badge = $('pending-badge');
   const panels = {
     read: $('tab-read'),
+    reading: $('tab-reading'),
     add: $('tab-add'),
     write: $('tab-write'),
   };
@@ -41,6 +42,7 @@
     // when the page loaded — but not on the very first show, since read.js
     // loads itself and app.js reloads it whenever the queue changes.
     if (name === 'read' && shown) window.epubDrop?.reloadRead?.();
+    if (name === 'reading') window.epubDropReading?.load();
     shown = true;
     // The editor takes focus when Write opens, but not when the caller asked
     // for something specific — otherwise the editor wins the race.
@@ -68,14 +70,14 @@
     const tab = event.target.closest('.tab');
     if (!tab) return;
     show(tab.dataset.tab);
-    // Clicking Library, even when already on it, brings in the latest feeds.
-    if (tab.dataset.tab === 'read') window.epubDropFeeds?.refreshAll();
+    // Clicking Library or Read, even when already on it, brings in the latest feeds.
+    if (tab.dataset.tab === 'read' || tab.dataset.tab === 'reading') window.epubDropFeeds?.refreshAll();
   });
 
   // Left/right arrows move between tabs when one has focus.
   nav.addEventListener('keydown', (event) => {
     if (!event.target.classList?.contains('tab')) return;
-    const order = ['read', 'add', 'write'];
+    const order = ['read', 'reading', 'add', 'write'];
     const at = order.indexOf(current);
     if (event.key === 'ArrowRight') {
       event.preventDefault();

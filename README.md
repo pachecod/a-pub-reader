@@ -372,6 +372,26 @@ stay clean and the panel's own dithering hides the rest.
 The firmware also ships decoders for JPEG and PNG only — no GIF, WebP or AVIF —
 so those are converted rather than passed through and silently skipped.
 
+## The Read tab
+
+**Read**, between Library and Add/Remove, is for choosing what to read rather
+than managing it. Each feed's newest edition is laid out like a front page — the
+headline, byline and opening of every article, the first five at once with
+**Show all** for the rest — and each headline opens its reading page at that
+article. Books show their cover, author and the publisher's description (or
+their opening lines); notes show their opening. A line at the top sums it up,
+for example *200 articles from 16 feeds · 2 books*.
+
+Summaries are worked out from the built EPUBs (`lib/summary.mjs`, served by
+`/api/reading`): an article's byline is its italic "Author · Date" line, and its
+opening is the first real paragraph of the story, skipping standfirsts, photo
+captions, writer bios and a headline repeated as the first words. Built files
+never change, so each summary is computed once and kept in memory.
+
+Reading pages opened from Read say **← Return to Read** and highlight Read in
+the menu; opened from the Library, they lead back there. Clicking Read, like
+Library, refreshes the feeds.
+
 ## Reading in the browser
 
 The **Library** tab lists everything the app has built — sent or not, marked
