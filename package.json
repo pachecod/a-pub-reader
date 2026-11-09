@@ -1,6 +1,6 @@
 {
   "name": "a-pub-reader",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "A-pub reader — build EPUBs from PDFs, web pages, feeds and your own writing, and send them to an Xteink reader",

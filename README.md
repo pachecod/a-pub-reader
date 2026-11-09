@@ -39,6 +39,18 @@ live anywhere. Requires Node.js; it installs dependencies on first run.
 Binds to `127.0.0.1` only. Nothing leaves your machine except fetching a URL you
 paste and uploading to your reader on the local network.
 
+## Versions
+
+| Version | Branch | Status |
+|---|---|---|
+| **2.0** | `v2` | In development. New work happens here. |
+| **1.0** | `main` (tag `v1.0.0`) | Stable. What a Render service set up from `main` runs. |
+
+A Render service deploys whichever branch it was set up with — `main` unless
+changed — so it stays on 1.0 until it is pointed at `v2` (Render: the service's
+**Settings → Build & Deploy → Branch**), or until `v2` is merged into `main` when
+2.0 is ready.
+
 ## Hosting it (Render)
 
 The app can also run on a server — for example to open it in a Boox's web
