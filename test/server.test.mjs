@@ -250,14 +250,11 @@ try {
     "only the app's own script may run on the reading page, never inline or the book's"
   );
   assert(/role="switch"/.test(webHtml) && /id="reader-state"/.test(webHtml), 'the reading page has the On reader switch and its note');
-  const fromRead = await (await fetch(`http://127.0.0.1:${APP_PORT}/read/${ok.id}?from=read`)).text();
-  assert(/href="\/\?tab=reading" class="return-link">← Return to Read</.test(fromRead), 'opened from Read, the way back is Return to Read');
-  assert(/<a href="\/\?tab=reading" aria-current="page">Read<\/a>/.test(fromRead), 'and Read is the current menu item');
-  assert(/Return to Library/.test(webHtml) && !/Return to Read/.test(webHtml), 'otherwise it leads back to the Library');
+  assert(/Return to Library/.test(webHtml) && /aria-current="page">Library</.test(webHtml), 'a reading page leads back to the Library');
 
   const reading = await api('/api/reading');
   const summarized = reading.body.items?.find((i) => i.id === ok.id);
-  assert(summarized && summarized.excerpt.length > 40, `the Read tab gets a summary with an opening: "${summarized?.excerpt.slice(0, 40)}…"`);
+  assert(summarized && summarized.excerpt.length > 40, `the Library gets a summary with an opening: "${summarized?.excerpt.slice(0, 40)}…"`);
   assert(summarized?.author === 'Sam Ito', `and the book's author: ${summarized?.author}`);
 
   const missing = await fetch(`http://127.0.0.1:${APP_PORT}/read/00000000-0000-0000-0000-000000000000`);

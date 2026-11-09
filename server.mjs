@@ -1402,7 +1402,7 @@ async function handle(req, res) {
     const entry = await outbox.get(readMatch[1]);
     if (!entry) return send(res, 404, 'text/plain', 'That item is no longer here.');
     try {
-      const html = await renderWebPage(entry, { hosted: HOSTED, from: url.searchParams.get('from') });
+      const html = await renderWebPage(entry, { hosted: HOSTED });
       res.writeHead(200, {
         'content-type': MIME['.html'],
         'cache-control': 'no-store',

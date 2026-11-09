@@ -16,8 +16,6 @@
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button type="button" role="tab" class="tab" data-tab="read" aria-selected="true"
             aria-controls="tab-read" id="tabbtn-read">Library</button>
-    <button type="button" role="tab" class="tab" data-tab="reading" aria-selected="false"
-            aria-controls="tab-reading" id="tabbtn-reading">Read</button>
     <button type="button" role="tab" class="tab" data-tab="add" aria-selected="false"
             aria-controls="tab-add" id="tabbtn-add">Add/Remove</button>
     <button type="button" role="tab" class="tab" data-tab="write" aria-selected="false"
@@ -37,11 +35,20 @@
   </div>
 
   <div class="panel" id="tab-read" role="tabpanel" aria-labelledby="tabbtn-read">
-    <!-- Makes the reader match the On reader switches below: sends what is
-         switched on and takes off what is switched off. -->
-    <div class="sync-bar device-only">
-      <p id="read-sync-status" class="status" aria-live="polite"></p>
-      <button id="read-sync" type="button" class="primary" disabled>Sync Reader</button>
+    <!-- A line summing up what there is to read, and Sync Reader, which makes
+         the reader match the On reader switches below: it sends what is
+         switched on and takes off what is switched off. With no books or notes
+         yet, the ways to add them sit here as links instead of empty boxes. -->
+    <div class="library-head">
+      <p id="library-summary" class="library-summary" aria-live="polite"></p>
+      <span id="library-add" class="library-add" hidden>
+        <button type="button" class="link" data-goto="add" data-focus="books-browse">Find books</button>
+        <button type="button" class="link" data-goto="write" data-focus="draft-title">Start writing</button>
+      </span>
+      <div class="sync-bar device-only">
+        <p id="read-sync-status" class="status" aria-live="polite"></p>
+        <button id="read-sync" type="button" class="primary" disabled>Sync Reader</button>
+      </div>
     </div>
     <section id="read-onboarding" hidden>
       <h2 class="onboard-title">Nothing to read yet</h2>
@@ -83,7 +90,7 @@
     <!-- Feed editions are what changes day to day, so they get the wide column;
          notes and books sit in a sidebar beside them on a large screen and
          stack underneath on a small one. -->
-    <div class="read-layout">
+    <div class="read-layout" id="read-layout">
       <div class="read-main">
         <section id="read-feeds-section">
           <div class="row-between">
@@ -103,7 +110,7 @@
           </div>
         </section>
       </div>
-      <aside class="read-side" aria-label="Notes and books">
+      <aside class="read-side" id="read-side" aria-label="Notes and books">
         <section id="read-notes-section">
           <div class="row-between">
             <h2>Notes <span id="read-notes-count" class="muted"></span></h2>
@@ -139,37 +146,6 @@
       </aside>
     </div>
 
-  </div>
-
-  <!-- Read: what there is to read, as a summary — each feed's latest articles
-       with their openings, and books and notes — rather than the Library's
-       management view. Drawn by reading.js. -->
-  <div class="panel" id="tab-reading" role="tabpanel" aria-labelledby="tabbtn-reading" hidden>
-    <header class="reading-head">
-      <h2>Read</h2>
-      <p id="reading-summary" class="muted" aria-live="polite">Gathering what there is to read…</p>
-      <!-- With no books or notes, these stand in for the empty sidebar. -->
-      <span id="reading-add" class="reading-add" hidden>
-        <button type="button" class="link" data-goto="add" data-focus="books-browse">Find books</button>
-        <button type="button" class="link" data-goto="write" data-focus="draft-title">Start writing</button>
-      </span>
-    </header>
-    <div class="reading-layout" id="reading-layout">
-      <section class="reading-main" aria-labelledby="reading-articles-title">
-        <h3 id="reading-articles-title" class="reading-section-title">Latest articles</h3>
-        <div id="reading-feeds" class="reading-feeds"></div>
-      </section>
-      <aside class="reading-side" id="reading-side">
-        <section aria-labelledby="reading-books-title">
-          <h3 id="reading-books-title" class="reading-section-title">Books</h3>
-          <div id="reading-books" class="reading-list"></div>
-        </section>
-        <section aria-labelledby="reading-notes-title">
-          <h3 id="reading-notes-title" class="reading-section-title">Notes</h3>
-          <div id="reading-notes" class="reading-list"></div>
-        </section>
-      </aside>
-    </div>
   </div>
 
   <div class="panel" id="tab-add" role="tabpanel" aria-labelledby="tabbtn-add" hidden>

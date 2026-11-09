@@ -1310,7 +1310,6 @@ async function loadOutbox() {
     // Library tab's list of what has been sent.
     updateSyncButtons();
     window.epubDropRead?.load();
-    window.epubDropReading?.reloadIfShown();
   } catch (err) {
     setStatus(err.message, 'bad');
   }

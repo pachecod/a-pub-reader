@@ -607,44 +607,18 @@ a { color: var(--accent); }
 .empty-note p { margin: 0; }
 .shelf-more { margin: 0.6rem 0 0; text-align: center; }
 
-/* Library sections drawn as the Read tab draws them, each block carrying the
-   On reader switch and the forget × in its top right corner. */
+/* Library sections drawn for reading; books and notes carry the forget × in
+   their top right corner. */
 .library-block { position: relative; list-style: none; min-width: 0; }
 .library-block > .reading-feed, .library-block > .reading-item { height: 100%; }
 .library-block .reading-item-title { padding-right: 1.4rem; }
 .library-block .card-forget { top: 0.55rem; right: 0.5rem; }
-.library-block .reading-feed > .reader-switch {
-  margin-top: 0.4rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid var(--line);
-}
-.library-block .reading-item .reader-switch { margin-top: 0.5rem; }
 
-/* ---------------------------------------------------------------- Read tab
-   A reading overview: feed editions like front pages in the wide column, books
-   and notes beside them. Headlines and openings are set in the reading pages'
-   serif, so choosing something to read already feels like reading. */
-.reading-head { display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap; }
-.reading-head h2 { font-size: 1.35rem; }
-.reading-head .muted { font-size: 0.9rem; }
-.reading-layout { display: flex; flex-direction: column; gap: 1.75rem; }
-.reading-main, .reading-side { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
-.reading-side { gap: 1.75rem; }
-.reading-side section { display: flex; flex-direction: column; gap: 0.75rem; }
-@media (min-width: 1000px) {
-  .reading-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem); gap: 20px; align-items: start; }
-  .reading-layout.reading-wide { grid-template-columns: minmax(0, 1fr); }
-}
-.reading-add { display: inline-flex; gap: 0.9rem; margin-left: auto; }
-.reading-section-title {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-.reading-feeds { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); align-items: start; }
+/* ---------------------------------------------------------------- readable blocks
+   How the Library draws its items (reading.js): feed editions like front
+   pages, books with covers, notes with openings. Headlines and openings are
+   set in the reading pages' serif, so choosing something to read already
+   feels like reading. */
 .reading-feed, .reading-item {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -687,7 +661,6 @@ a { color: var(--accent); }
 }
 .reading-excerpt-long { -webkit-line-clamp: 5; }
 .reading-more { margin-top: 0.35rem; font-size: 0.82rem; }
-.reading-list { display: flex; flex-direction: column; gap: 0.75rem; }
 .reading-item { display: flex; gap: 0.9rem; padding: 0.85rem 1rem; }
 .reading-cover-link { flex: none; }
 .reading-cover {
@@ -712,8 +685,14 @@ a { color: var(--accent); }
 .sync-bottom { justify-content: flex-end; }
 .sync-bottom[hidden] { display: none; }
 
-/* Sync Reader at the top of the Library, with its result beside it. */
-.sync-bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.9rem; }
+/* The top of the Library: the summary line on the left, Sync Reader (with its
+   result) on the right. */
+.library-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1.2rem; }
+.library-summary { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.library-summary:empty { display: none; }
+.library-add { display: inline-flex; gap: 0.9rem; }
+.library-add[hidden] { display: none; }
+.sync-bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.9rem; margin-left: auto; }
 .sync-bar .status { margin: 0; text-align: right; }
 
 /* The On reader switch on each Library card. */
@@ -877,7 +856,7 @@ a { color: var(--accent); }
   .tab { padding: 0 0.55rem; font-size: 0.88rem; }
   .menubar .pending-badge { font-size: 0.72rem; padding: 0.2rem 0.5rem; }
 }
-/* A phone: four menu items and the badge only fit closed up a little more. */
+/* A phone: the menu items and the badge fit closed up a little more. */
 @media (max-width: 480px) {
   .menubar { gap: 0.4rem; padding: 0 0.5rem; }
   .tab { padding: 0 0.4rem; font-size: 0.82rem; }
@@ -919,6 +898,8 @@ a { color: var(--accent); }
   }
   /* The sidebar is one card wide. */
   .read-side .shelf { grid-template-columns: minmax(0, 1fr); }
+  /* No books or notes: the feed editions take the full width. */
+  .read-layout.read-wide { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Library tab, first run */

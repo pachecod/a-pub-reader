@@ -253,8 +253,8 @@ normal sequence work: the reader is usually *not* connected at the moment you
 build something. You refresh feeds and convert readings on your own Wi-Fi, then
 join the reader's hotspot — which has no internet — and sync once.
 
-**Sync with reader** on Add/Remove lists everything, with the same **On reader**
-switch as the Library card and, above it, **Send via**, **Reader address** and
+**Sync with reader** on Add/Remove lists everything, each with its **On reader**
+switch, and, above it, **Send via**, **Reader address** and
 **Sync Reader** (repeated under a list that has items). A dropped PDF, a pasted
 URL, a draft and a feed refresh all land there, tagged with where they came
 from and where they are going; like the Library, only a feed's newest edition is
@@ -373,31 +373,24 @@ stay clean and the panel's own dithering hides the rest.
 The firmware also ships decoders for JPEG and PNG only — no GIF, WebP or AVIF —
 so those are converted rather than passed through and silently skipped.
 
-## The Read tab
+## Reading from the Library
 
-**Read**, between Library and Add/Remove, is for choosing what to read rather
-than managing it. Each feed's newest edition is laid out like a front page — the
-headline, byline and opening of every article, the first five at once with
-**Show all** for the rest — and each headline opens its reading page at that
-article. Books show their cover, author and the publisher's description (or
-their opening lines); notes show their opening. A line at the top sums it up,
-for example *200 articles from 16 feeds · 2 books*.
+The **Library** is drawn for reading. Each feed's newest edition is laid out
+like a front page — the headline, byline and opening of every article, the first
+five at once with **Show all** for the rest — and each headline opens its
+reading page at that article. Books show their cover, author and the
+publisher's description (or their opening lines); notes show their opening.
+Books and notes carry a **×** to forget them (what goes on the reader is set
+with the switches on Add/Remove); empty sections keep their buttons for adding things. A line at the
+top sums it up, for example *200 articles from 16 feeds · 2 books*, and with no
+books or notes the feed editions take the full width.
 
 Summaries are worked out from the built EPUBs (`lib/summary.mjs`, served by
-`/api/reading`): an article's byline is its italic "Author · Date" line, and its
-opening is the first real paragraph of the story, skipping standfirsts, photo
-captions, writer bios and a headline repeated as the first words. Built files
-never change, so each summary is computed once and kept in memory.
-
-The **Library** draws each section the same way once it has something in it —
-feed editions as front pages, books with their covers and descriptions, notes
-with their openings — with each item's **On reader** switch added, and a **×** to forget on books
-and notes (a feed is dropped under Add/Remove → Feeds); empty sections keep their buttons for adding things. (The Read
-tab may go once the Library covers it.)
-
-Reading pages opened from Read say **← Return to Read** and highlight Read in
-the menu; opened from the Library, they lead back there. Clicking Read, like
-Library, refreshes the feeds.
+`/api/reading`, drawn by `public/reading.js`): an article's byline is its italic
+"Author · Date" line, and its opening is the first real paragraph of the story,
+skipping standfirsts, photo captions, writer bios and a headline repeated as the
+first words. Built files never change, so each summary is computed once and kept
+in memory.
 
 ## Reading in the browser
 
@@ -484,9 +477,9 @@ closes. Fixed-layout books ignore all of this and page through their images.
 
 ## Managing what's on the reader
 
-Each item has one **On reader** switch — on its Library card and, mirrored,
-in the **Queued to send** list on Add/Remove — and **Sync Reader** (at the top
-of the Library, and on Add/Remove) makes the reader match the switches:
+Each item has one **On reader** switch — in the **Sync with reader** list on
+Add/Remove, and at the top of its reading page — and **Sync Reader** (at the
+top of the Library, and on Add/Remove) makes the reader match the switches:
 
 - **On** (the default): the item goes to the reader at the next sync, or stays
   there if it already is.

@@ -2,8 +2,9 @@
 
 // The Library tab: everything this app has built, whether or not it has reached
 // the reader yet, drawn readably — each section as the Read tab draws it (a
-// feed's articles, a book's cover and description, a note's opening), with
-// the On reader switch and a forget control on each item.
+// feed's articles, a book's cover and description, a note's opening), with a
+// forget control on books and notes. The On reader switches live on
+// Add/Remove.
 //
 // Built from the queue's entries, split into books, notes and feed editions,
 // matching the three folders they live in on the device. They are used
@@ -34,6 +35,10 @@
     forgetKeep: $('forget-keep'),
     forgetDevice: $('forget-device'),
     booksSection: $('read-books-section'),
+    summary: $('library-summary'),
+    addLinks: $('library-add'),
+    layout: $('read-layout'),
+    side: $('read-side'),
     feedsSection: $('read-feeds-section'),
     feedsMore: $('read-feeds-more'),
     booksMore: $('read-books-more'),
@@ -79,22 +84,21 @@
   }
 
   /**
-   * An item drawn as the Read tab draws it — a feed's articles, a book's cover
-   * and description, a note's opening — with the Library's On reader switch and
-   * × added. Without a summary (an unreadable file) it falls back to row().
+   * An item drawn for reading — a feed's articles, a book's cover and
+   * description, a note's opening — with a × to forget books and notes. What
+   * goes on the reader is set on Add/Remove. Without a summary (an unreadable
+   * file) it falls back to row().
    */
   function readableRow(entry, summary) {
     const blocks = window.epubDropReading;
     if (!summary || !blocks) return row(entry);
     const block =
       summary.kind === 'feed'
-        ? blocks.feedBlock(summary, { from: 'library' })
-        : blocks.itemBlock(summary, { from: 'library' });
+        ? blocks.feedBlock(summary)
+        : blocks.itemBlock(summary);
 
     const li = document.createElement('li');
     li.className = 'library-block';
-    const toggle = window.epubDrop?.readerSwitch?.(entry);
-    if (toggle) (block.querySelector('.reading-item-body') || block).appendChild(toggle);
     li.appendChild(block);
     // A feed is dropped under Add/Remove → Feeds and kept off the reader with
     // its switch, so its edition gets no forget control of its own.
@@ -137,10 +141,6 @@
     meta.append(bits.filter(Boolean).join(' · '));
     body.appendChild(meta);
 
-    // The one control for the reader: the same switch as on Add/Remove, with
-    // a note saying where the item stands.
-    const toggle = window.epubDrop?.readerSwitch?.(entry);
-    if (toggle) body.appendChild(toggle);
     li.appendChild(body);
 
     // Downloading lives on the reading page; the card itself only reads or
@@ -206,6 +206,15 @@
       el.notesMore.hidden = notes.length === 0;
       el.notesCount.textContent = notes.length ? `· ${notes.length}` : '';
       el.notesEmpty.hidden = notes.length > 0;
+
+      // A line summing up what there is to read. With no books or notes, the
+      // articles take the full width and the ways to add those become links
+      // beside it, rather than a sidebar of empty boxes.
+      el.summary.textContent = nothingYet ? '' : window.epubDropReading?.summaryLine(reading.items) || '';
+      const sideEmpty = !nothingYet && !books.length && !notes.length;
+      el.side.hidden = sideEmpty;
+      el.layout.classList.toggle('read-wide', sideEmpty);
+      el.addLinks.hidden = !sideEmpty;
 
       el.books.replaceChildren(...books.map(draw));
       el.notes.replaceChildren(...notes.map(draw));
