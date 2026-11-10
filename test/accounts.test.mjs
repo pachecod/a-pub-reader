@@ -206,6 +206,28 @@ try {
   assert((await reader.call(`/read/${bossItem.id}`)).status === 404 && (await reader.call(`/out/${bossItem.id}`)).status === 404, "and cannot open someone else's item, even knowing its id");
   assert((await boss.call(`/read/${bossItem.id}`)).status === 200, 'while its owner can');
 
+  console.log('\n== the browser keeps what it fetched ==');
+  const style = await boss.call('/style.css');
+  const styleTag = style.headers.get('etag');
+  assert(styleTag && /no-cache/.test(style.headers.get('cache-control')), `app files carry a version and are checked on each visit (${style.headers.get('cache-control')})`);
+  const style304 = await boss.call('/style.css', { headers: { 'if-none-match': styleTag } });
+  assert(style304.status === 304 && style304.text === '', 'an unchanged file answers 304, with nothing to download');
+  const list = await boss.call('/api/outbox');
+  const listTag = list.headers.get('etag');
+  assert(listTag && /private/.test(list.headers.get('cache-control')) && /Cookie/i.test(list.headers.get('vary') || ''), 'library data is versioned, private, and kept per signed-in person');
+  assert((await boss.call('/api/outbox', { headers: { 'if-none-match': listTag } })).status === 304, 'unchanged library data answers 304');
+  const theirs = await reader.call('/api/outbox', { headers: { 'if-none-match': listTag } });
+  assert(theirs.status === 200 && theirs.data.items[0]?.title === 'Reader Reading', "someone else's copy is never accepted for another person's library");
+  await convert(boss, 'Another Boss Reading');
+  const changedList = await boss.call('/api/outbox', { headers: { 'if-none-match': listTag } });
+  assert(changedList.status === 200 && changedList.data.items.length === 2 && changedList.headers.get('etag') !== listTag, 'after something is added, the new list comes down');
+  const readPage = await boss.call(`/read/${bossItem.id}`);
+  const readTag = readPage.headers.get('etag');
+  assert(readTag && /private/.test(readPage.headers.get('cache-control')), 'a read page is versioned and private');
+  const read304 = await boss.call(`/read/${bossItem.id}`, { headers: { 'if-none-match': readTag } });
+  assert(read304.status === 304 && /script-src 'self'/.test(read304.headers.get('content-security-policy') || ''), 'an unchanged read page answers 304 (without rebuilding it), keeping its security policy');
+  assert((await reader.call(`/read/${bossItem.id}`, { headers: { 'if-none-match': readTag } })).status === 404, "a cached copy does not let someone else open the page");
+
   console.log('\n== changing a password ==');
   const otherTab = browser();
   await otherTab.signIn('reader1', readerPassword);
@@ -238,11 +260,12 @@ try {
   const deleted = await boss.call('/api/admin/users/delete', { method: 'POST', body: { id: reader1Id, confirm: 'reader1' } });
   assert(deleted.status === 200, 'an admin deletes an account');
   assert((await browser().signIn('reader1', reset.data.password)).status === 401, 'which can no longer sign in');
-  assert((await boss.call('/api/outbox')).data.items.length === 1, "and the admin's own library is untouched");
+  assert((await boss.call('/api/outbox')).data.items.length === 2, "and the admin's own library is untouched");
 
   console.log('\n== signing out ==');
   const out = await boss.call('/api/auth/signout', { method: 'POST', body: {} });
   assert(out.status === 200 && /Max-Age=0/.test(out.setCookie || ''), 'signing out clears the cookie');
+  assert(out.headers.get('clear-site-data') === '"cache"', "and tells the browser to drop what it kept of the site");
   assert((await boss.call('/api/outbox')).status === 401, 'and the session is gone');
 
   console.log('\n== too many tries ==');

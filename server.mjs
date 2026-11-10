@@ -943,13 +943,13 @@ const routes = {
 
   'POST /api/auth/signout': async (req) => {
     if (accounts) await accounts.deleteSession(sessionToken(req)).catch(() => {});
-    return { ...json(200, { ok: true }), headers: { 'set-cookie': sessionCookie(req, '') } };
+    return { ...json(200, { ok: true }), headers: { 'set-cookie': sessionCookie(req, ''), 'clear-site-data': '"cache"' } };
   },
 
   'POST /api/auth/signout-everywhere': async (req) => {
     if (!req.user) throw httpError(401, 'Sign in first.');
     const count = await accounts.deleteUserSessions(req.user.id);
-    return { ...json(200, { ok: true, count }), headers: { 'set-cookie': sessionCookie(req, '') } };
+    return { ...json(200, { ok: true, count }), headers: { 'set-cookie': sessionCookie(req, ''), 'clear-site-data': '"cache"' } };
   },
 
   'GET /api/auth/me': async (req) =>
@@ -1166,7 +1166,7 @@ const routes = {
     }
 
     try {
-      const book = await readEpub(await outbox.readEpub(entry));
+      const book = await cachedEpub(entry);
       return json(200, {
         id: entry.id,
         kind: 'text',
@@ -1186,7 +1186,7 @@ const routes = {
 
     const index = Number(url.searchParams.get('n') || 0);
     try {
-      const book = await readEpub(await outbox.readEpub(entry));
+      const book = await cachedEpub(entry);
       const chapter = await readChapter(book, index, {
         imageUrl: (internal) => `/out/${entry.id}/epub/${internal.split('/').map(encodeURIComponent).join('/')}`,
       });
@@ -1980,14 +1980,15 @@ async function routeRequest(req, res, url, key, ip) {
 
     const internal = decodeURIComponent(epubFileMatch[2]);
     try {
-      const book = await readEpub(await outbox.readEpub(entry));
+      const book = await cachedEpub(entry);
       // Looked up as an exact archive entry, so a traversal path simply misses.
       const data = await readEpubFile(book, internal);
       if (!data) return send(res, 404, 'text/plain', 'Not found');
       res.writeHead(200, {
         'content-type': mediaTypeFor(internal),
         'content-length': data.length,
-        'cache-control': 'no-store',
+        // A built EPUB never changes, so the browser can keep its pictures.
+        'cache-control': 'private, max-age=31536000, immutable',
       });
       return res.end(data);
     } catch {
@@ -2000,20 +2001,20 @@ async function routeRequest(req, res, url, key, ip) {
   if (req.method === 'GET' && readMatch) {
     const entry = await outbox.get(readMatch[1]);
     if (!entry) return send(res, 404, 'text/plain', 'That item is no longer here.');
+    // The page changes only when the item does (its reader state) or the app
+    // does, so the browser's copy is reused without reading the EPUB again.
+    const etag = etagOf('read', entry.id, entry.builtAt, entry.onReader, entry.deliveredAt, HOSTED, CODE_VERSION);
+    // Chapters are HTML from wherever the item came from, served as a page
+    // of their own. The only script allowed is the app's own file for the
+    // On reader switch: nothing inline (so no handler attributes) and
+    // nothing from the book or another site, rather than trusting that
+    // conversion stripped every script.
+    const csp =
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+    if (browserHas(req, etag)) return sendVersioned(req, res, { etag, extra: { 'content-security-policy': csp } });
     try {
       const html = await renderWebPage(entry, { hosted: HOSTED, load: () => outbox.readEpub(entry) });
-      res.writeHead(200, {
-        'content-type': MIME['.html'],
-        'cache-control': 'no-store',
-        // Chapters are HTML from wherever the item came from, served as a page
-        // of their own. The only script allowed is the app's own file for the
-        // On reader switch: nothing inline (so no handler attributes) and
-        // nothing from the book or another site, rather than trusting that
-        // conversion stripped every script.
-        'content-security-policy':
-          "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-      });
-      return res.end(html);
+      return sendVersioned(req, res, { type: MIME['.html'], payload: html, etag, extra: { 'content-security-policy': csp } });
     } catch (err) {
       return send(res, 500, 'text/plain', `Could not read that EPUB: ${err.message}`);
     }
@@ -2030,7 +2031,7 @@ async function routeRequest(req, res, url, key, ip) {
     try {
       const data = await outbox.readPage(job, index);
       if (!data) return send(res, 404, 'text/plain', 'Not found');
-      res.writeHead(200, { 'content-type': 'image/png', 'content-length': data.length, 'cache-control': 'no-store' });
+      res.writeHead(200, { 'content-type': 'image/png', 'content-length': data.length, 'cache-control': 'private, max-age=31536000, immutable' });
       return res.end(data);
     } catch {
       return send(res, 404, 'text/plain', 'Not found');
@@ -2060,6 +2061,10 @@ async function routeRequest(req, res, url, key, ip) {
     try {
       const { status, type, payload, headers } = await route(req, url);
       for (const [name, value] of Object.entries(headers || {})) res.setHeader(name, value);
+      // Library data: the browser keeps its copy and gets a 304 when unchanged.
+      if (req.method === 'GET' && status === 200 && type === 'application/json' && url.pathname.startsWith('/api/')) {
+        return sendVersioned(req, res, { type, payload, etag: etagOf('api', payload) });
+      }
       return send(res, status, type, payload);
     } catch (err) {
       return send(res, err.status || 500, 'application/json', JSON.stringify({ error: err.message }));
@@ -2108,8 +2113,8 @@ async function serveStatic(res, pathname) {
   try {
     const data = await fs.readFile(target);
     const type = MIME[path.extname(target).toLowerCase()] || 'application/octet-stream';
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
-    return res.end(data);
+    // The app's own files: kept by the browser, checked on each visit.
+    return sendVersioned(res.req, res, { type, payload: data, etag: etagOf('file', data), privacy: 'public' });
   } catch {
     return send(res, 404, 'text/plain', 'Not found');
   }
@@ -2124,6 +2129,62 @@ function json(status, payload) {
 function send(res, status, type, payload) {
   res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' });
   res.end(payload);
+}
+
+// ---------------------------------------------------------------- caching
+//
+// The browser may keep what it has fetched and ask "is this still current?"
+// (ETag / If-None-Match): when nothing changed the answer is a tiny 304 and
+// the page reuses its copy. Responses about someone's library are private (a
+// proxy never keeps them) and vary by the session cookie. Signing out clears
+// the browser's cache for the site.
+
+// Part of every version stamp, so a new deploy never reuses an older page.
+const CODE_VERSION = process.env.RENDER_GIT_COMMIT || `start-${Date.now()}`;
+
+/** A version stamp from some parts. */
+const etagOf = (...parts) => `"${createHash('sha1').update(parts.map(String).join('\u0000')).digest('base64url').slice(0, 22)}"`;
+
+/** Whether the browser's copy (If-None-Match) is this version. */
+function browserHas(req, etag) {
+  const header = String(req.headers['if-none-match'] || '');
+  return header.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag);
+}
+
+/** Answer with a version stamp: 304 if the browser already has it, else the body. */
+function sendVersioned(req, res, { status = 200, type, payload, etag, privacy = 'private', extra = {} }) {
+  const headers = { etag, 'cache-control': `${privacy}, no-cache`, vary: 'Cookie', ...extra };
+  if (status === 200 && browserHas(req, etag)) {
+    res.writeHead(304, headers);
+    return res.end();
+  }
+  res.writeHead(status, { 'content-type': type, ...headers });
+  return res.end(payload);
+}
+
+// The last few EPUBs opened, so a page with many pictures reads its EPUB once
+// rather than once per picture (from a bucket, that is a download each time).
+const EPUB_CACHE_BYTES = 30 * 1024 * 1024;
+const epubCache = new Map();
+async function cachedEpub(entry) {
+  const key = `${ownerContext.getStore() || DEFAULT_OWNER}/${entry.id}`;
+  if (epubCache.has(key)) {
+    const hit = epubCache.get(key);
+    epubCache.delete(key);
+    epubCache.set(key, hit);
+    return hit.book;
+  }
+  const data = await outbox.readEpub(entry);
+  const book = await readEpub(data);
+  epubCache.set(key, { book, size: data.length });
+  let total = 0;
+  for (const [, v] of epubCache) total += v.size;
+  for (const k of epubCache.keys()) {
+    if (total <= EPUB_CACHE_BYTES || epubCache.size <= 1) break;
+    total -= epubCache.get(k).size;
+    epubCache.delete(k);
+  }
+  return book;
 }
 
 /** An error that carries the HTTP status to answer with. */
