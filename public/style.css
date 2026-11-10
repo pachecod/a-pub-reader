@@ -21,6 +21,14 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
   --shadow-accent: 0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 10px rgba(91, 155, 255, 0.28);
+  /* Text on an accent-colored button or badge. */
+  --on-accent: #10131a;
+  /* The eBook view's page, white like the reader's screen unless a theme
+     (themes.css) says otherwise. */
+  --page-bg: #ffffff;
+  --page-text: #111111;
+  --page-muted: #444444;
+  --page-link: #1a4f9c;
 }
 
 @media (prefers-color-scheme: light) {
@@ -40,9 +48,10 @@
     --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08), 0 1px 1px rgba(16, 24, 40, 0.04);
     --shadow-md: 0 1px 3px rgba(16, 24, 40, 0.08), 0 6px 16px rgba(16, 24, 40, 0.08);
     --shadow-accent: 0 1px 2px rgba(16, 24, 40, 0.15), 0 3px 10px rgba(28, 99, 214, 0.3);
-    --ok: #1f9254;
-    --warn: #a76a06;
+    --ok: #1a7f49;
+    --warn: #946004;
     --bad: #c0392b;
+    --on-accent: #ffffff;
   }
 }
 
@@ -86,6 +95,44 @@ body {
 .brand h1 { font-size: 1.05rem; margin: 0; letter-spacing: 0.01em; white-space: nowrap; }
 .menubar-spacer { flex: 1; }
 .menubar .pending-badge { align-self: center; }
+
+/* The color theme button in the menu bar, and the list it opens. */
+.theme-menu { position: relative; display: flex; align-items: center; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: none;
+}
+.theme-toggle:hover, .theme-toggle[aria-expanded="true"] { color: var(--accent); border-color: var(--line); background: var(--panel-2); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 19rem;
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  padding: 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 12px 36px rgba(16, 24, 40, 0.22);
+}
+.theme-panel-head { margin: 0.1rem 0.4rem 0.5rem; color: var(--muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+@media (max-width: 640px) {
+  .theme-panel { position: fixed; top: 60px; right: 0.5rem; }
+}
 
 h1 { font-size: 1.05rem; margin: 0; letter-spacing: 0.02em; }
 h2 { font-size: 0.95rem; margin: 0; }
@@ -275,7 +322,7 @@ textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--ac
   border-color: transparent;
 }
 .toolbar button:hover { background: var(--panel); border-color: var(--line); }
-.toolbar button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.toolbar button.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .toolbar .sep { width: 1px; height: 1.1rem; background: var(--line); margin: 0 0.3rem; }
 
 .editor {
@@ -373,8 +420,7 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .primary { color: #10131a; } }
+.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .secondary { font-size: 0.88rem; }
 .danger {
   border-color: var(--bad);
@@ -384,7 +430,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .danger:hover:not(:disabled) {
   background: var(--bad);
   border-color: var(--bad);
-  color: #fff;
+  color: var(--on-accent);
 }
 .actions .danger { margin-left: auto; }
 
@@ -545,7 +591,7 @@ a { color: var(--accent); }
 .discover-groups button[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .discover .list { max-height: 28rem; overflow-y: auto; }
 .discover-latest { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; font-style: italic; }
@@ -613,13 +659,12 @@ a { color: var(--accent); }
   padding: 0.05rem 0.5rem;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 0.72rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .new-count[hidden] { display: none; }
-@media (prefers-color-scheme: dark) { .new-count { color: #10131a; } }
 .reading-feed-head .new-count { margin-left: auto; }
 
 /* The total beside Refresh feeds is a button; hovering it (or a tap) lists
@@ -692,13 +737,12 @@ a { color: var(--accent); }
   padding: 0 0.35rem;
   border-radius: 4px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font: 700 0.62rem/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   vertical-align: 0.2em;
 }
-@media (prefers-color-scheme: dark) { .new-tag { color: #10131a; } }
 #read-refresh { padding: 0.3rem 0.75rem; font-size: 0.82rem; }
 
 /* Library sections drawn for reading; books and notes carry the forget × in
@@ -874,8 +918,8 @@ a { color: var(--accent); }
   max-width: 22rem;
 }
 .viewer-text {
-  background: #fff;
-  color: #111;
+  background: var(--page-bg);
+  color: var(--page-text);
   width: 100%;
   max-width: 34rem;
   padding: 2.2rem 2.4rem 3rem;
@@ -897,13 +941,13 @@ a { color: var(--accent); }
   color: #333;
 }
 .viewer-text img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
-.viewer-text figcaption, .viewer-text .cp-meta { font-size: 0.85em; color: #444; text-align: center; }
+.viewer-text figcaption, .viewer-text .cp-meta { font-size: 0.85em; color: var(--page-muted); text-align: center; }
 .viewer-text .cp-meta { text-align: left; }
 .viewer-text table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
 .viewer-text th, .viewer-text td { border: 1px solid #999; padding: 0.25em 0.4em; text-align: left; }
 .viewer-text hr { border: 0; border-top: 1px solid #999; margin: 1.2em 0; }
 .viewer-text ul, .viewer-text ol { margin: 0 0 0.7em 1.3em; padding: 0; }
-.viewer-text a { color: #1a4f9c; }
+.viewer-text a { color: var(--page-link); }
 .viewer-text pre { white-space: pre-wrap; font-size: 0.85em; }
 .viewer-note { color: var(--muted); font-size: 0.85rem; padding: 1rem; }
 
@@ -972,7 +1016,7 @@ a { color: var(--accent); }
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
 }
-.pending-badge:hover { background: var(--accent); color: #fff; }
+.pending-badge:hover { background: var(--accent); color: var(--on-accent); }
 
 .panel {
   display: flex;
@@ -1117,7 +1161,7 @@ a { color: var(--accent); }
 .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
 .seg-btn:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
 .seg-btn[aria-pressed="true"],
-.seg-btn[aria-pressed="true"]:hover { background: var(--accent); color: #fff; }
+.seg-btn[aria-pressed="true"]:hover { background: var(--accent); color: var(--on-accent); }
 .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 
@@ -1248,7 +1292,7 @@ a { color: var(--accent); }
 }
 .dialog .check { display: flex; gap: 0.45rem; align-items: flex-start; font-size: 0.8rem; color: var(--muted); }
 
-/* Pending device deletions. Warning-coloured because it describes something
+/* Pending device deletions. Warning-colored because it describes something
    that will be destroyed, and it sits directly above the button that does it. */
 .removal-note {
   margin: 0.6rem 0 0;
@@ -1306,7 +1350,7 @@ a { color: var(--accent); }
 }
 .primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--accent-strong); }
 .danger { border-color: var(--bad); color: var(--bad); }
-.danger:hover:not(:disabled) { background: var(--bad); color: #fff; box-shadow: var(--shadow-md); }
+.danger:hover:not(:disabled) { background: var(--bad); color: var(--on-accent); box-shadow: var(--shadow-md); }
 .pending-badge { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .discover-groups button[aria-pressed="true"] { background: linear-gradient(var(--accent), var(--accent-strong)); border-color: var(--accent-strong); }
 button:disabled { box-shadow: none; filter: saturate(0.6); }

@@ -115,7 +115,8 @@ a { color: var(--accent); }
   top: calc(100% + 8px);
   right: 0;
   z-index: 3;
-  width: 15.5rem;
+  width: 19rem;
+  max-width: calc(100vw - 1rem);
   padding: 0.85rem 0.95rem 0.7rem;
   background: var(--panel);
   border: 1px solid var(--line-strong);
@@ -161,6 +162,7 @@ a { color: var(--accent); }
   cursor: pointer;
 }
 .type-reset:hover { text-decoration: underline; }
+.type-theme-label { display: block; width: auto; margin: 0.8rem 0 0.4rem; padding-top: 0.7rem; border-top: 1px solid var(--line); }
 .type-toggle:focus-visible, .type-step:focus-visible, .type-reset:focus-visible, .type-row select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

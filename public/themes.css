@@ -1,0 +1,279 @@
+/* Color themes, chosen with the theme picker (theme.js) and kept per browser.
+ *
+ * Each theme sets every color variable the app, the reading pages and the
+ * eBook view use. Without a data-theme attribute (Automatic), each page keeps
+ * its own light and dark colors and follows the system.
+ *
+ * How the palettes were built:
+ * - Body text is at least 7:1 against its surface (WCAG AAA) and the accent,
+ *   used for links and buttons, at least 4.5:1 (AA); muted text at least 4.5:1.
+ * - One accent per theme, used sparingly, with surfaces in one hue family, so
+ *   the page reads as a whole rather than a set of colors.
+ * - Light themes tint their page slightly (no pure white backdrop) and keep the
+ *   brightest white for the surfaces you read on; dark themes avoid pure black,
+ *   which smears on screens, and lighten their accent instead of saturating it.
+ * - Reading surfaces are warm or neutral; cool tones are kept to chrome.
+ */
+
+/* ---- shared by every light theme */
+:root[data-theme="classic-light"],
+:root[data-theme="paper"],
+:root[data-theme="sage"],
+:root[data-theme="harbor"],
+:root[data-theme="contrast"] {
+  color-scheme: light;
+  --on-accent: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 11%, transparent);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08), 0 1px 1px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 1px 3px rgba(16, 24, 40, 0.08), 0 6px 16px rgba(16, 24, 40, 0.08);
+  --shadow-accent: 0 1px 2px rgba(16, 24, 40, 0.15), 0 3px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+  --sheet-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 6px 24px rgba(16, 24, 40, 0.06);
+  /* The eBook view's links and captions follow the theme too. */
+  --page-link: var(--accent);
+  --page-muted: var(--muted);
+}
+
+/* ---- shared by every dark theme */
+:root[data-theme="classic-dark"],
+:root[data-theme="dusk"],
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
+  --shadow-accent: 0 1px 2px rgba(0, 0, 0, 0.4), 0 3px 10px color-mix(in srgb, var(--accent) 28%, transparent);
+  --sheet-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --page-link: var(--accent);
+  --page-muted: var(--muted);
+}
+
+/* Classic Light: the app's own light colors, whatever the system says. */
+:root[data-theme="classic-light"] {
+  --bg: #e9edf2;
+  --panel: #ffffff;
+  --panel-2: #e4e9f0;
+  --line: #cdd4de;
+  --line-strong: #aeb7c4;
+  --text: #141821;
+  --muted: #4f5868;
+  --accent: #1c63d6;
+  --accent-strong: #1452b8;
+  --button-top: #ffffff;
+  --button-bottom: #f1f4f8;
+  --ok: #1a7f49;
+  --warn: #946004;
+  --bad: #c0392b;
+  --page-bg: #ffffff;
+  --page-text: #111111;
+  --sheet: #ffffff;
+  --sheet-line: #dde2ea;
+}
+
+/* Classic Dark: the app's own dark colors. */
+:root[data-theme="classic-dark"] {
+  --bg: #14161a;
+  --panel: #1c1f25;
+  --panel-2: #23272f;
+  --line: #31363f;
+  --line-strong: #444b57;
+  --text: #e7e9ee;
+  --muted: #9aa2b1;
+  --accent: #7cb0ff;
+  --accent-strong: #5b9bff;
+  --on-accent: #10131a;
+  --button-top: #2a2f38;
+  --button-bottom: #22262e;
+  --ok: #58c98a;
+  --warn: #e5b567;
+  --bad: #e57373;
+  --page-bg: #22262d;
+  --page-text: #e3e6ec;
+  --sheet: #1c1f25;
+  --sheet-line: #31363f;
+}
+
+/* Paper: cream and sepia ink with a rust accent, the look of a printed page
+   and the classic e-reader "sepia" mode; easy on the eyes for long reading. */
+:root[data-theme="paper"] {
+  --bg: #f1e9dc;
+  --panel: #fbf7ef;
+  --panel-2: #ece3d3;
+  --line: #ddd1bd;
+  --line-strong: #c3b398;
+  --text: #33281e;
+  --muted: #66574a;
+  --accent: #a0461f;
+  --accent-strong: #84391a;
+  --button-top: #fdfaf4;
+  --button-bottom: #f1e9db;
+  --ok: #4a7a28;
+  --warn: #8f5a00;
+  --bad: #a8382c;
+  --page-bg: #fbf4e6;
+  --page-text: #33281e;
+  --sheet: #fffaf1;
+  --sheet-line: #e4d8c4;
+}
+
+/* Sage: muted greens with a deep forest accent; low-saturation and calm. */
+:root[data-theme="sage"] {
+  --bg: #e7ede7;
+  --panel: #fbfcfa;
+  --panel-2: #dfe8df;
+  --line: #c9d6c9;
+  --line-strong: #a7b9a7;
+  --text: #1c2720;
+  --muted: #4b5c4f;
+  --accent: #2f6b4f;
+  --accent-strong: #245640;
+  --button-top: #ffffff;
+  --button-bottom: #eef3ee;
+  --ok: #2f7d4a;
+  --warn: #8a5c00;
+  --bad: #ad3d2e;
+  --page-bg: #fbfdf9;
+  --page-text: #1c2720;
+  --sheet: #ffffff;
+  --sheet-line: #d5e0d5;
+}
+
+/* Harbor: cool blue-grey chrome with a teal accent and neutral white pages. */
+:root[data-theme="harbor"] {
+  --bg: #e5ecf0;
+  --panel: #fafcfd;
+  --panel-2: #dce6ec;
+  --line: #c6d3db;
+  --line-strong: #a2b4bf;
+  --text: #13212a;
+  --muted: #475a65;
+  --accent: #0e6e7e;
+  --accent-strong: #0a5966;
+  --button-top: #ffffff;
+  --button-bottom: #edf3f6;
+  --ok: #1f7f55;
+  --warn: #8d5b00;
+  --bad: #b2393a;
+  --page-bg: #fdfefe;
+  --page-text: #13212a;
+  --sheet: #ffffff;
+  --sheet-line: #d3dfe6;
+}
+
+/* Dusk: warm brown-black with amber light, for reading late without the
+   blue cast of a cool dark theme. */
+:root[data-theme="dusk"] {
+  --bg: #1b1714;
+  --panel: #241f1b;
+  --panel-2: #2d2722;
+  --line: #3a332c;
+  --line-strong: #4f453b;
+  --text: #ece3d6;
+  --muted: #b0a291;
+  --accent: #e0a458;
+  --accent-strong: #eeb46c;
+  --on-accent: #1b1714;
+  --button-top: #302924;
+  --button-bottom: #28221e;
+  --ok: #94c48a;
+  --warn: #e8bb66;
+  --bad: #e88f7e;
+  --page-bg: #2a2420;
+  --page-text: #eae0d1;
+  --sheet: #241f1b;
+  --sheet-line: #3a332c;
+}
+
+/* Midnight: deep navy with a soft violet accent. */
+:root[data-theme="midnight"] {
+  --bg: #0e1424;
+  --panel: #151d33;
+  --panel-2: #1b2540;
+  --line: #27324f;
+  --line-strong: #374566;
+  --text: #e4e8f4;
+  --muted: #9ba5c2;
+  --accent: #a78bfa;
+  --accent-strong: #b9a2ff;
+  --on-accent: #0e1424;
+  --button-top: #1d2743;
+  --button-bottom: #182139;
+  --ok: #6fd3a0;
+  --warn: #f0c26e;
+  --bad: #f08a9a;
+  --page-bg: #182038;
+  --page-text: #e2e6f2;
+  --sheet: #151d33;
+  --sheet-line: #27324f;
+}
+
+/* High Contrast: black on white with a strong blue and solid black edges, for
+   low vision or bright light. */
+:root[data-theme="contrast"] {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #eeeeee;
+  --line: #6b6b6b;
+  --line-strong: #000000;
+  --text: #000000;
+  --muted: #2e2e2e;
+  --accent: #0040c1;
+  --accent-strong: #00309a;
+  --button-top: #ffffff;
+  --button-bottom: #ffffff;
+  --ok: #00692b;
+  --warn: #754600;
+  --bad: #a00000;
+  --page-bg: #ffffff;
+  --page-text: #000000;
+  --sheet: #ffffff;
+  --sheet-line: #000000;
+}
+:root[data-theme="contrast"] a { text-decoration-thickness: 2px; }
+
+/* ---- the theme picker (theme.js renders it) */
+.theme-list { display: flex; flex-direction: column; gap: 2px; }
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.theme-option:hover { background: var(--panel-2); }
+.theme-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.theme-option[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.theme-swatch {
+  position: relative;
+  flex: none;
+  width: 2.6rem;
+  height: 1.9rem;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
+  overflow: hidden;
+}
+.theme-swatch > span {
+  position: absolute;
+  inset: 0.35rem 0.4rem 0 0.4rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.3rem;
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 0 0 1px rgba(127, 127, 127, 0.25);
+}
+.theme-swatch i { display: block; width: 0.5rem; height: 0.5rem; border-radius: 50%; }
+.theme-swatch i + i { width: 0.8rem; height: 0.22rem; margin-top: 0.14rem; border-radius: 2px; }
+.theme-words { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.theme-name { font-size: 0.88rem; font-weight: 600; }
+.theme-note { color: var(--muted); font-size: 0.75rem; }
+.theme-list.is-compact { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.theme-list.is-compact .theme-option { padding: 0.35rem 0.4rem; gap: 0.45rem; }
+.theme-list.is-compact .theme-swatch { width: 2rem; height: 1.5rem; }
+.theme-list.is-compact .theme-name { font-size: 0.8rem; font-weight: 500; }

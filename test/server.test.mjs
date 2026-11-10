@@ -267,6 +267,14 @@ try {
     'a reading page has font and size controls'
   );
   assert(/<script src="\/web-read\.js"><\/script>/.test(webHtml), 'its script runs before the text is drawn, so the saved type applies at once');
+  assert(/href="\/themes\.css"/.test(webHtml) && /<script src="\/theme\.js"><\/script>/.test(webHtml) && /data-theme-choices/.test(webHtml), 'a reading page offers the color themes');
+  const home = await (await fetch(`http://127.0.0.1:${APP_PORT}/`)).text();
+  assert(/href="\/themes\.css"/.test(home) && /<script src="\/theme\.js"><\/script>/.test(home) && /data-theme-toggle/.test(home), 'the app has the color theme picker');
+  const themeCss = await (await fetch(`http://127.0.0.1:${APP_PORT}/themes.css`)).text();
+  const themeJs = await (await fetch(`http://127.0.0.1:${APP_PORT}/theme.js`)).text();
+  const themeIds = [...themeJs.matchAll(/id: '([a-z-]+)', name:/g)].map((m) => m[1]).filter((id) => id !== 'auto');
+  assert(themeIds.length >= 5, `at least five color themes to choose from (${themeIds.length})`);
+  assert(themeIds.every((id) => themeCss.includes(`:root[data-theme="${id}"] {`)), 'every theme in the picker has its colors');
 
   const reading = await api('/api/reading');
   const summarized = reading.body.items?.find((i) => i.id === ok.id);

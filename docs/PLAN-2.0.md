@@ -266,6 +266,7 @@ static folder.
 | **Find feeds** | Add, edit, reorder, remove the publisher list and topics; live check of each URL — the roadmap item | new (replaces `lib/discover.mjs` list) |
 | **Settings** | Invite code required, new accounts need approval, per-user limits, default feeds for new users, analytics on/off | "Editor Settings" + `app_settings` |
 | **Legal pages** | Edit Terms and Privacy (needed once there are accounts and analytics) | `admin-legal` |
+| **Themes** | Add, edit, preview and remove color themes beyond the built-in eight; set the default theme for new users; hide a built-in one. Each theme is a set of named colors checked for contrast (text 7:1, accent and muted text 4.5:1) before it can be saved | new |
 | **System text** | Edit welcome and other interface copy | `admin-system-text` |
 | **Usage** | GA4 numbers (via the GA4 Data API), storage per user, conversions, feed fetch health | `origin/3.6` `admin-usage` |
 | **Activity** | Sign-ins, failed sign-ins, admin actions (audit log) | `origin/3.6` `admin-activity` |
@@ -274,6 +275,14 @@ static folder.
 Not carried over (VR-specific): templates, submissions/review inbox, common
 assets, snippets/Ridey AI, hosted pages, and **billing** (*decided: left out
 for now*).
+
+**Color themes** (built before Phase 2): Automatic plus eight themes ship with the app
+(`public/themes.css`, listed in `public/theme.js`): Classic Light,
+Classic Dark, Paper, Sage, Harbor, Dusk, Midnight and High Contrast. The
+choice is kept per browser for now; with accounts it follows the person.
+Admin-made themes are stored in `app_settings` and served as a generated
+stylesheet after `themes.css`, using the same variable names, so pages need no
+change to pick them up.
 
 **No "view as user" peek** (*decided*). For each user the admin sees counts and
 sizes only (feeds, books, notes, storage used, last sign-in), not titles or
