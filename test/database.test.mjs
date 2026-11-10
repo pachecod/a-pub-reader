@@ -19,6 +19,7 @@ import { PgCollection } from '../lib/store/collections.mjs';
 import { AppSettings, MIGRATIONS, fromPGlite, migrate } from '../lib/store/db.mjs';
 import { LOCAL_OWNER, checkOwner, databaseBackend, fileBackend } from '../lib/store/backend.mjs';
 import { MemoryFetchCache, PgFetchCache, sharedFetcher } from '../lib/store/fetchcache.mjs';
+import { composeFeedHtml, withDates } from '../lib/rss.mjs';
 import { DEFAULT_LIMITS, LimitError, checkLimits, resolveLimits } from '../lib/limits.mjs';
 import { hydrateItems } from '../lib/rss.mjs';
 import pg from 'pg';
@@ -160,6 +161,20 @@ for (const [label, cache] of [['database', new PgFetchCache(db)], ['memory', new
   const failing = await rejects(shared('feed:bad', 60000, async () => { throw new Error('down'); }));
   assert(failing && (await cache.get('feed:bad', 60000)) === null, `${label}: a failure is not kept`);
 }
+// A feed read back from the database has its dates as text; an edition still
+// builds once withDates restores them (Render's feeds failed without this).
+{
+  const shared = sharedFetcher(new PgFetchCache(db));
+  const feed = () => ({ title: 'Dated', link: 'https://example.com/', items: [{ title: 'One', link: 'https://example.com/1', date: new Date('2026-11-09T12:00:00Z'), html: '<p>x</p>' }] });
+  await shared('feed:dated', 60000, async () => feed());
+  const cached = await shared('feed:dated', 60000, async () => feed());
+  assert(typeof cached.items[0].date === 'string', 'a cached feed comes back with its dates as text');
+  const revived = withDates(cached);
+  assert(revived.items[0].date instanceof Date && revived.items[0].date.getUTCDate() === 9, 'withDates makes them dates again');
+  assert(/Nov 9, 2026/.test(composeFeedHtml({ title: 'Dated', link: 'https://example.com/' }, revived.items)), 'and an edition builds from the cached feed');
+  assert(withDates({ items: [{ date: 'not a date' }] }).items[0].date === null, 'an unreadable date is dropped, not passed on');
+}
+
 await new PgFetchCache(db).prune(0);
 assert((await db.query('SELECT count(*)::int AS n FROM fetch_cache')).rows[0].n === 0, 'old cache entries are pruned');
 

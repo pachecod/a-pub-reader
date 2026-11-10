@@ -5,6 +5,7 @@
 // each assertion depends on are visible and adjustable.
 
 import { extractPdf } from '../lib/pdf.mjs';
+import { runPdfJob } from '../lib/pdfjob.mjs';
 import { buildEpub } from '../lib/epub.mjs';
 import { JSDOM } from 'jsdom';
 import JSZip from 'jszip';
@@ -325,6 +326,24 @@ try {
 } catch (err) {
   assert(true, `garbage input rejects (${err.name}: ${String(err.message).slice(0, 60)})`);
 }
+
+console.log('\n== in a separate process ==');
+// The server converts PDFs in a child process (lib/pdfjob.mjs) so their memory
+// is returned afterwards; the result must be the same as converting here.
+const viaJob = await runPdfJob({ kind: 'text', data: pdf, name: 'week-03-reading.pdf', includeImages: true });
+const direct = await extractPdf({ data: pdf, name: 'week-03-reading.pdf', includeImages: true, normalizeImage: normalizeForDevice });
+assert(viaJob.title === direct.title && viaJob.chapters.length === direct.chapters.length && viaJob.textLength === direct.textLength, `a PDF converts the same in its own process (${viaJob.chapters.length} chapters)`);
+const picturedJob = await runPdfJob({ kind: 'text', data: pdfWithPicture(), name: 'figures.pdf', includeImages: true });
+assert(picturedJob.images.length === pictured.images.length && Buffer.isBuffer(picturedJob.images[0]?.data), 'pictures come back as Buffers');
+const pagesJob = await runPdfJob({ kind: 'pages', data: pdf, options: { width: 480, scale: 1, split: 'whole' } });
+assert(pagesJob.pages.length > 0 && Buffer.isBuffer(pagesJob.pages[0].data), `page images render in their own process (${pagesJob.pages.length})`);
+const jobFailure = await runPdfJob({ kind: 'text', data: Buffer.from('this is not a pdf at all'), name: 'x.pdf' }).then(() => null, (err) => err);
+assert(jobFailure instanceof Error && jobFailure.message.length > 0, `a failure comes back as an error (${String(jobFailure?.message).slice(0, 50)})`);
+const [first, second] = await Promise.all([
+  runPdfJob({ kind: 'text', data: pdf, name: 'a.pdf' }),
+  runPdfJob({ kind: 'text', data: pdf, name: 'b.pdf' }),
+]);
+assert(first.title && second.title, 'two jobs at once both finish (they run one after the other)');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

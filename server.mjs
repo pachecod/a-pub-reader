@@ -18,9 +18,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import JSZip from 'jszip';
 
 import { extractArticle } from './lib/extract.mjs';
-import { extractPdf } from './lib/pdf.mjs';
+import { runPdfJob } from './lib/pdfjob.mjs';
 import { buildEpub, buildImageEpub, safeFilename } from './lib/epub.mjs';
-import { PANEL, htmlToBlocks, renderBlocksToPages, renderPdfPages } from './lib/render.mjs';
+import { PANEL, htmlToBlocks, renderBlocksToPages } from './lib/render.mjs';
 import { normalizeForDevice } from './lib/assets.mjs';
 import { feedFilename, normalizeUrl } from './lib/feeds.mjs';
 import { checkLimits, resolveLimits } from './lib/limits.mjs';
@@ -44,7 +44,7 @@ import {
   sameOrigin,
   secretProblems,
 } from './lib/security.mjs';
-import { composeFeedHtml, fetchFeed, hydrateItems, siteLabel, siteOf } from './lib/rss.mjs';
+import { composeFeedHtml, fetchFeed, hydrateItems, siteLabel, siteOf, withDates } from './lib/rss.mjs';
 import { CATALOGUES, bookFilename, downloadBook, fetchCatalogue } from './lib/books.mjs';
 import {
   copyToVolume,
@@ -203,7 +203,9 @@ const feeds = scoped('feeds');
 const fetchCache = backend.kind === 'database' ? new PgFetchCache(backend.db) : HOSTED ? new MemoryFetchCache() : null;
 const shared = sharedFetcher(fetchCache);
 /** fetchFeed, through the shared cache when hosted. */
-const fetchFeedShared = (url) => shared(`feed:${normalizeUrl(url) || url}`, FEED_TTL_MS, () => fetchFeed(url));
+// From the cache, a feed's dates are text again; withDates restores them.
+const fetchFeedShared = async (url) =>
+  withDates(await shared(`feed:${normalizeUrl(url) || url}`, FEED_TTL_MS, () => fetchFeed(url)));
 const articleCache = fetchCache && {
   get: (link) => fetchCache.get(`article:${link}`, ARTICLE_TTL_MS),
   set: (link, value) => fetchCache.set(`article:${link}`, value),
@@ -339,11 +341,10 @@ async function convertItem(item, options) {
     // In image mode the original page layout is what we want to keep, so the
     // PDF is rasterized directly instead of having its text pulled out.
     if (imageMode) {
-      const rendered = await renderPdfPages({
+      const rendered = await runPdfJob({
+        kind: 'pages',
         data,
-        width: PANEL.width,
-        scale: options.imageScale,
-        split: options.imageSplit,
+        options: { width: PANEL.width, scale: options.imageScale, split: options.imageSplit },
       });
       const label = String(item.name || '').replace(/\.pdf$/i, '') || 'Untitled';
       return finishImagePages(
@@ -352,7 +353,8 @@ async function convertItem(item, options) {
       );
     }
 
-    const article = await extractPdf({ data, name: item.name, includeImages, normalizeImage: normalizeForDevice });
+    // In its own process: see lib/pdfjob.mjs.
+    const article = await runPdfJob({ kind: 'text', data, name: item.name, includeImages });
     return finish(article, item, article.warnings);
   }
 

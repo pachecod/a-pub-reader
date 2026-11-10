@@ -102,9 +102,12 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
+  gap: 0.4rem;
   height: 34px;
-  padding: 0;
+  padding: 0 0.6rem;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
   border: 1px solid transparent;
   border-radius: 8px;
   background: none;
@@ -132,6 +135,9 @@ body {
 .theme-panel-head { margin: 0.1rem 0.4rem 0.5rem; color: var(--muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 @media (max-width: 640px) {
   .theme-panel { position: fixed; top: 60px; right: 0.5rem; }
+  /* Narrow screens: the palette alone. */
+  .theme-toggle { width: 34px; padding: 0; }
+  .theme-toggle-word { display: none; }
 }
 
 h1 { font-size: 1.05rem; margin: 0; letter-spacing: 0.02em; }
