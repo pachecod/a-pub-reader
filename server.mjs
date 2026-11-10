@@ -38,6 +38,8 @@ import { SUMMARY_VERSION, pruneSummaries, savedSummary, summarize } from './lib/
 import { discoverFeeds } from './lib/discover.mjs';
 import { explainHttpFailure } from './lib/httperror.mjs';
 import { blockedReason, configureNetGuard, safeFetch } from './lib/netguard.mjs';
+import { configureUserAgent, userAgent } from './lib/useragent.mjs';
+import { robotsAllow } from './lib/robots.mjs';
 import {
   RateLimiter,
   appCsp,
@@ -122,6 +124,13 @@ if (secretIssues.length) {
 // Hosted, addresses that users give the app may not point into the server's
 // own network. On your own computer they may (a page on your home network).
 configureNetGuard({ allowPrivate: !HOSTED });
+
+// The address of this install, for the user agent's "about" link. Render sets
+// RENDER_EXTERNAL_URL; elsewhere PUBLIC_URL can.
+const SITE_URL = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '';
+configureUserAgent({ siteUrl: SITE_URL });
+// Who publishers can write to: to opt out, or about a takedown.
+const CONTACT_EMAIL = String(process.env.CONTACT_EMAIL || process.env.ADMIN_EMAIL || '').trim();
 
 // How many proxies in front of the app add to X-Forwarded-For. Render has one.
 const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS ?? (LOOPBACK ? 0 : 1)) || 0;
@@ -250,6 +259,7 @@ const PUBLIC_PATHS = new Set([
   'GET /logo.svg',
   'GET /api/auth/me',
   'POST /api/auth/signin',
+  'GET /about/fetching',
 ]);
 
 /** A user as their own page and the admin page see them. */
@@ -281,18 +291,94 @@ const drafts = scoped('drafts');
 const assets = scoped('assets');
 const feeds = scoped('feeds');
 
-// Hosted, feeds and articles that several libraries follow are fetched once
-// and shared (in the database when there is one). Not on your Mac.
-const fetchCache = backend.kind === 'database' ? new PgFetchCache(backend.db) : HOSTED ? new MemoryFetchCache() : null;
+// Fetched feeds are kept for 10 minutes, so several readers (or tabs, or the
+// new-article check) never make a publisher serve the same feed again and
+// again; hosted, in the database and shared by every library. Each feed's
+// ETag and Last-Modified are kept too, so the next fetch asks only for
+// something newer and an unchanged feed costs a 304.
+const fetchCache = backend.kind === 'database' ? new PgFetchCache(backend.db) : new MemoryFetchCache();
 const shared = sharedFetcher(fetchCache);
-/** fetchFeed, through the shared cache when hosted. */
-// From the cache, a feed's dates are text again; withDates restores them.
-const fetchFeedShared = async (url) =>
-  withDates(await shared(`feed:${normalizeUrl(url) || url}`, FEED_TTL_MS, () => fetchFeed(url)));
-const articleCache = fetchCache && {
-  get: (link) => fetchCache.get(`article:${link}`, ARTICLE_TTL_MS),
-  set: (link, value) => fetchCache.set(`article:${link}`, value),
+// What the publisher answered last, for asking "anything newer?".
+const VALIDATORS_MS = 30 * 24 * 60 * 60 * 1000;
+// Hosted, a fetched feed is reused for 10 minutes across everyone who follows
+// it. On your own computer a check or refresh always asks the publisher (an
+// unchanged feed is a 304, so that costs almost nothing) and sees the latest.
+const FEED_REUSE_MS = HOSTED ? FEED_TTL_MS : 0;
+
+/** fetchFeed through the cache, asking the publisher only for changes. */
+async function fetchFeedShared(url) {
+  if (await optedOut(url)) throw httpError(403, OPTED_OUT_MESSAGE);
+  const key = normalizeUrl(url) || url;
+  // From the cache, a feed's dates are text again; withDates restores them.
+  return withDates(
+    await shared(`feed:${key}`, FEED_REUSE_MS, async () => {
+      const last = await fetchCache.get(`feedmeta:${key}`, VALIDATORS_MS).catch(() => null);
+      const fetched = await fetchFeed(url, last ? { etag: last.etag, lastModified: last.lastModified } : {});
+      if (fetched.notModified && last?.feed) return last.feed;
+      if (fetched.etag || fetched.lastModified) {
+        await fetchCache.set(`feedmeta:${key}`, { etag: fetched.etag, lastModified: fetched.lastModified, feed: fetched }).catch(() => {});
+      }
+      return fetched;
+    })
+  );
+}
+
+// A fetched article's text is kept for a few hours, for that library only: a
+// publisher's article is not copied from one person's library into another's.
+const articleCache = {
+  get: (link) => fetchCache.get(`article:${ownerContext.getStore() || DEFAULT_OWNER}:${link}`, ARTICLE_TTL_MS),
+  set: (link, value) => fetchCache.set(`article:${ownerContext.getStore() || DEFAULT_OWNER}:${link}`, value),
 };
+
+// ---- publishers who opted out
+//
+// A list of sites (kept in the install's settings, managed on the Admin page)
+// whose feeds and pages the app will not fetch for anyone: adding such a feed
+// is refused, refreshing one stops, and they leave Find feeds. A site covers
+// its subdomains too: example.com covers www.example.com and feeds.example.com.
+const OPTED_OUT_MESSAGE = 'This publisher has asked not to be included in A-Pub Reader.';
+let optOutMemo = { at: 0, domains: [] };
+
+/** Clean a list of site names: lower case, no scheme, path or "www.". */
+function cleanDomains(list) {
+  return [...new Set((Array.isArray(list) ? list : String(list || '').split(/[\s,]+/))
+    .map((d) => String(d).trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, ''))
+    .filter((d) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)))].sort();
+}
+
+async function optedOutDomains() {
+  if (Date.now() - optOutMemo.at > 60 * 1000) {
+    optOutMemo = { at: Date.now(), domains: cleanDomains(await backend.settings.get('optedOutDomains', []).catch(() => [])) };
+  }
+  return optOutMemo.domains;
+}
+
+/** Whether an address is on a site that opted out. */
+async function optedOut(url) {
+  let host;
+  try {
+    host = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return false;
+  }
+  return (await optedOutDomains()).some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+/** Whether an article's page may be fetched: not opted out, and robots.txt allows it. */
+const mayFetchArticle = async (link) => !(await optedOut(link)) && (await robotsAllow(link));
+
+// ---- feeds that keep failing wait longer between tries: 1 hour, then 2, 4, …, up to a day.
+const BACKOFF_FIRST_MS = 60 * 60 * 1000;
+const BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
+
+async function noteFeedFailure(feed, message) {
+  const failures = (feed.failures || 0) + 1;
+  const wait = Math.min(BACKOFF_MAX_MS, BACKOFF_FIRST_MS * 2 ** (failures - 1));
+  await feeds.update(feed.id, { lastError: message, failures, retryAfter: new Date(Date.now() + wait).toISOString() }).catch(() => {});
+}
+
+/** Whether a feed is waiting out its backoff (only automatic tries respect it). */
+const backingOff = (feed) => Boolean(feed.retryAfter && Date.parse(feed.retryAfter) > Date.now());
 if (fetchCache) setInterval(() => fetchCache.prune(ARTICLE_TTL_MS).catch(() => {}), 60 * 60 * 1000).unref();
 
 /**
@@ -450,9 +536,8 @@ async function convertItem(item, options) {
         maxBytes: 15 * 1024 * 1024,
         redirect: 'follow',
         headers: {
-          // Some sites serve a stub to unknown clients; a normal UA gets the article.
-          'user-agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+          // The app names itself (see lib/useragent.mjs).
+          'user-agent': userAgent(),
           accept: 'text/html,application/xhtml+xml',
         },
       });
@@ -707,6 +792,10 @@ async function checkFeedsForNew() {
     while (next < followed.length) {
       const feed = followed[next++];
       const edition = editions.find((e) => e.source?.feedId === feed.id);
+      if (backingOff(feed)) {
+        results.push({ feedId: feed.id, title: feed.title || feed.url, newCount: 0, error: 'Waiting after repeated failures.' });
+        continue;
+      }
       try {
         const fetched = await fetchFeedShared(feed.url);
         const latest = fetched.items.slice(0, feed.limit || 15);
@@ -734,6 +823,7 @@ async function checkFeedsForNew() {
           })),
         });
       } catch (err) {
+        await noteFeedFailure(feed, err.message);
         results.push({ feedId: feed.id, title: feed.title || feed.url, newCount: 0, error: err.message });
       }
     }
@@ -745,14 +835,26 @@ async function checkFeedsForNew() {
 // A refresh-all in progress, per library.
 const refreshAllRuns = new Map();
 
-async function refreshTargets(targets) {
+async function refreshTargets(targets, { manual = false } = {}) {
   const results = [];
   for (const feed of targets) {
+    // Refresh all leaves a feed that keeps failing alone until its wait is
+    // over; refreshing that one feed by hand always tries.
+    if (!manual && backingOff(feed)) {
+      results.push({
+        ok: false,
+        id: feed.id,
+        title: feed.title || feed.url,
+        error: `Skipped: it failed ${feed.failures} time${feed.failures === 1 ? '' : 's'} in a row, so it waits until ${new Date(feed.retryAfter).toLocaleString()} (refresh it on its own to try now).`,
+      });
+      continue;
+    }
     try {
       results.push(await refreshFeed(feed));
       await countBuilds(1);
     } catch (err) {
-      await feeds.update(feed.id, { lastError: err.message, lastRefreshedAt: new Date().toISOString() });
+      await noteFeedFailure(feed, err.message);
+      await feeds.update(feed.id, { lastRefreshedAt: new Date().toISOString() }).catch(() => {});
       results.push({ ok: false, id: feed.id, title: feed.title || feed.url, error: err.message });
     }
   }
@@ -781,6 +883,7 @@ async function refreshFeed(feed) {
     ? await hydrateItems(fetched.items, {
         limit: feed.limit,
         articleCache,
+        mayFetch: mayFetchArticle,
         extractArticle: (opts) => extractArticle({ ...opts, includeImages: false }),
       })
     : fetched.items.slice(0, feed.limit);
@@ -788,6 +891,8 @@ async function refreshFeed(feed) {
   if (feed.fullText) {
     const full = items.filter((i) => i.hydrated).length;
     steps.push(`Fetched full text for ${full} of ${items.length}`);
+    const held = items.filter((i) => i.held).length;
+    if (held) steps.push(`Kept the feed's own text for ${held}: the site asks automated tools not to fetch those pages`);
   }
 
   // One pass over the whole feed: the chapter splitter breaks on the per-item
@@ -851,6 +956,8 @@ async function refreshFeed(feed) {
   await feeds.update(feed.id, {
     title,
     site,
+    failures: 0,
+    retryAfter: null,
     lastRefreshedAt: new Date().toISOString(),
     lastItemCount: items.length,
     lastError: null,
@@ -905,7 +1012,72 @@ function adminPassword(typed, user) {
   return readablePassword();
 }
 
+const escapeHtml = (text) =>
+  String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** The public page the user agent links to: what the app fetches, and how to opt out. */
+function aboutFetchingPage() {
+  const contact = CONTACT_EMAIL
+    ? `<a href="mailto:${escapeHtml(CONTACT_EMAIL)}">${escapeHtml(CONTACT_EMAIL)}</a>`
+    : 'the administrator of this site';
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About fetching · A-Pub Reader</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/themes.css">
+<script src="/theme.js"></script>
+</head>
+<body class="auth-page">
+<main class="account-main">
+  <article class="auth-card about-card">
+    <div class="auth-brand"><img src="/logo.svg" alt="" width="32" height="32"><h1>About A-Pub Reader's fetching</h1></div>
+    <p>A-Pub Reader turns the RSS feeds, web pages and documents a reader chooses into eBooks for
+    their own reading, on an e-reader or in the browser. Each person's library is private: nothing is
+    republished or shown publicly.</p>
+
+    <h2>What it fetches</h2>
+    <ul>
+      <li><strong>Feeds</strong> that a reader has added, when they refresh or check for new articles.
+      A fetched feed is kept for 10 minutes and shared by everyone who follows it, and the next fetch
+      asks only for changes (If-None-Match / If-Modified-Since), so an unchanged feed costs a 304.
+      Feeds that keep failing are tried less and less often, at most once a day.</li>
+      <li><strong>Article pages</strong>, only when a reader has switched on full text for that feed,
+      only where the site's <code>robots.txt</code> allows our user agent, one page per article. Pages
+      that robots.txt excludes are never fetched; the reader gets the feed's own text and a link.</li>
+      <li><strong>A single web page</strong> when a reader pastes its address to read it later.</li>
+    </ul>
+    <p>It never signs in to a site, sends cookies, or works around a paywall.</p>
+
+    <h2>How it identifies itself</h2>
+    <p>Every request carries this user agent:</p>
+    <p><code>${escapeHtml(userAgent())}</code></p>
+    <p>In <code>robots.txt</code>, rules for <code>User-agent: A-PubReader</code> (or <code>*</code>) apply.</p>
+
+    <h2>Credit</h2>
+    <p>Every article names its publication, author and date, and links to the original at the top
+    and bottom; the Library links each feed to its publisher's site.</p>
+
+    <h2>Publishers: opting out, and takedowns</h2>
+    <p>To have your site left out entirely (its feeds refused, refreshes stopped, and its pages never
+    fetched), or to ask for anything to be removed, write to ${contact} with your site's address.</p>
+    <p>A copyright notice under the DMCA should go to the same address and include: your signature,
+    the work, where the material is (its address), your contact details, a statement of good-faith
+    belief that the use is not authorized, and a statement, under penalty of perjury, that the notice
+    is accurate and you are authorized to act for the owner.</p>
+  </article>
+</main>
+</body>
+</html>
+`;
+}
+
 const routes = {
+  'GET /about/fetching': async () => ({ status: 200, type: MIME['.html'], payload: aboutFetchingPage() }),
+
   // ---- signing in and out (accounts)
 
   'GET /signin': async (req, url) => {
@@ -982,6 +1154,16 @@ const routes = {
 
   'GET /admin': async () => fileResult(path.join(ADMIN_DIR, 'admin.html'), MIME['.html']),
   'GET /admin/admin.js': async () => fileResult(path.join(ADMIN_DIR, 'admin.js'), MIME['.js']),
+
+  // Publishers who asked to be left out (see optedOut).
+  'GET /api/admin/optout': async () => json(200, { domains: cleanDomains(await backend.settings.get('optedOutDomains', [])) }),
+  'POST /api/admin/optout': async (req) => {
+    const { domains = [] } = await body(req);
+    const cleaned = cleanDomains(domains);
+    await backend.settings.set('optedOutDomains', cleaned);
+    optOutMemo = { at: 0, domains: [] };
+    return json(200, { domains: cleaned });
+  },
 
   'GET /api/admin/users': async (req) =>
     json(200, { users: await accounts.list(), me: req.user.id, lookup: Boolean(LOOKUP_KEY) }),
@@ -1405,12 +1587,23 @@ const routes = {
   'GET /api/feeds/discover': async (req, url) => {
     const following = (await feeds.list()).map((f) => f.url);
     const groups = await discoverFeeds({ following, fresh: url.searchParams.get('fresh') === '1' });
+    // Publishers who opted out are not offered.
+    for (const group of groups) {
+      const kept = [];
+      for (const feed of group.feeds || []) if (!(await optedOut(feed.url))) kept.push(feed);
+      group.feeds = kept;
+    }
     return json(200, { groups });
   },
 
   'POST /api/feeds/add': async (req) => {
     const payload = await body(req);
     await ensureRoom({ feeds: 1 });
+    if (await optedOut(String(payload.url || ''))) return json(403, { error: OPTED_OUT_MESSAGE });
+    // Hosted, a new feed starts with the publisher's own feed text; fetching
+    // each article's page is something to switch on per feed. On your own
+    // computer (personal reading, like a read-later app) it starts on.
+    if (payload.fullText === undefined) payload.fullText = !HOSTED;
     try {
       const { feed, added } = await feeds.add(payload);
       // Probe the feed straight away so a typo surfaces now, not on refresh.
@@ -1468,9 +1661,9 @@ const routes = {
     if (!targets.length) return json(400, { error: 'No feeds to refresh.' });
     await ensureRoom({ builds: targets.length });
 
-    // The page refreshes everything when it loads, so a reload — or a second
-    // tab — mid-refresh would otherwise start another run alongside it and
-    // build every edition twice. Later callers wait for the run in progress.
+    // A second click, or a second tab, mid-refresh would otherwise start
+    // another run alongside it and build every edition twice. Later callers
+    // wait for the run in progress. (Feeds refresh only when asked.)
     if (!payload.id) {
       const owner = stores().owner;
       if (!refreshAllRuns.has(owner)) {
@@ -1480,7 +1673,8 @@ const routes = {
       return json(200, { folder: FEED_FOLDER, results, feeds: await feeds.list() });
     }
 
-    const results = await refreshTargets(targets);
+    // One feed, refreshed on purpose: tried even if it is waiting after failures.
+    const results = await refreshTargets(targets, { manual: true });
     return json(200, { folder: FEED_FOLDER, results, feeds: await feeds.list() });
   },
 

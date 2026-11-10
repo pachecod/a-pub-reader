@@ -51,6 +51,10 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
+      # Where publishers write to opt out or about a takedown, shown on the
+      # public About fetching page. Optional: ADMIN_EMAIL is used if unset.
+      - key: CONTACT_EMAIL
+        sync: false
       # Lets admins look up a password they set, until the person picks their
       # own. Render makes a random key; keep it, or lookups stop working.
       - key: PASSWORD_LOOKUP_KEY

@@ -1561,3 +1561,15 @@ h2, .column-title { color: var(--text); }
   .menubar .pending-badge .badge-words { display: none; }
   .menubar .pending-badge { min-width: 1.9rem; text-align: center; }
 }
+
+/* About fetching (public page), the opt-out list, and the app's footer link. */
+.about-card { max-width: 44rem; line-height: 1.55; }
+.about-card h1 { font-size: 1.2rem; }
+.about-card h2 { font-size: 0.98rem; margin: 1.4rem 0 0.4rem; }
+.about-card ul { padding-left: 1.2rem; }
+.about-card li { margin: 0.4rem 0; }
+.about-card code { overflow-wrap: anywhere; font-size: 0.85em; }
+.admin-main-more { padding-top: 0; }
+.admin-optout { width: 100%; padding: 0.55rem 0.65rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); color: var(--text); font: 0.9rem/1.5 ui-monospace, Menlo, Consolas, monospace; margin-bottom: 0.7rem; }
+.app-footer { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.5rem 0; font-size: 0.78rem; color: var(--muted); text-align: center; }
+.app-footer a { color: var(--muted); }

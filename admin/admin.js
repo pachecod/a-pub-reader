@@ -197,5 +197,20 @@
     }
   });
 
+  async function loadOptOut() {
+    const { domains } = await api('/api/admin/optout');
+    $('optout-domains').value = domains.join('\n');
+  }
+  $('optout-save').addEventListener('click', async () => {
+    try {
+      const { domains } = await api('/api/admin/optout', { domains: $('optout-domains').value });
+      $('optout-domains').value = domains.join('\n');
+      show($('optout-status'), domains.length ? `Saved: ${domains.length} site${domains.length === 1 ? '' : 's'} left out.` : 'Saved: no sites are left out.', 'ok');
+    } catch (err) {
+      show($('optout-status'), err.message, 'bad');
+    }
+  });
+
   load().catch((err) => show($('users-status'), err.message, 'bad'));
+  loadOptOut().catch((err) => show($('optout-status'), err.message, 'bad'));
 })();

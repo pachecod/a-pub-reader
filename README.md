@@ -104,6 +104,29 @@ another person's items, even knowing their address.
 - The first admin, made from `ADMIN_USERNAME`/`ADMIN_PASSWORD`, takes over the
   library the install had before accounts, so a trial library carries on.
 
+### Fetching politely
+
+The app identifies itself as `A-PubReader/2.0 (+<site>/about/fetching)`, not as
+a browser, and the public **About fetching** page (linked from every page)
+says what it fetches and how a publisher can opt out or send a takedown.
+
+- **Feeds** are fetched only when someone refreshes or checks for new
+  articles, kept for 10 minutes (shared by everyone who follows them when
+  hosted), and asked for with their ETag and Last-Modified, so an unchanged
+  feed costs the publisher a 304. A feed that keeps failing waits 1 hour, then
+  2, 4, up to a day, before Refresh all or the new-article check tries again
+  (refreshing it on its own always tries).
+- **Article pages** (full text) are fetched only where the site's
+  `robots.txt` allows `A-PubReader` (or `*`); otherwise the edition keeps the
+  feed's own text and the link. Hosted, a new feed starts with full text off,
+  and fetched article text stays in that person's library rather than being
+  shared between libraries. On your own computer full text starts on.
+- **Publishers who opt out** are listed on the Admin page: their feeds cannot
+  be added, refreshing them stops, their pages are never fetched, and they
+  leave Find feeds.
+- Feeds that declare their own XML entities are refused (no "billion laughs"),
+  and external entities are never resolved.
+
 On your own computer the app stays single-user. To try accounts there, run it
 with `ACCOUNTS=1`, an admin's details and a database; `DATABASE_URL=pglite:<a
 folder>` uses an embedded PostgreSQL, so nothing else needs installing
@@ -120,6 +143,8 @@ Hosting is controlled by environment variables:
 | `HOST` | Where to listen. Unset keeps it on this computer; `0.0.0.0` listens publicly and turns on hosted mode, which needs accounts (`DATABASE_URL`) or `APP_PASSWORD`. |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL` | The first administrator, made on the first start with accounts and no admin; unused after that. The password must be at least 12 characters and not a common one. |
 | `PASSWORD_LOOKUP_KEY` | 32 random bytes (base64 or hex) for looking up passwords an admin set. Unset, lookup is off and a password is shown once. Render generates it. |
+| `CONTACT_EMAIL` | Where publishers write to opt out or about a takedown, on the public `/about/fetching` page (defaults to `ADMIN_EMAIL`). |
+| `PUBLIC_URL` | This install's address, for the user agent's link to `/about/fetching` (Render's own `RENDER_EXTERNAL_URL` is used when unset). |
 | `ACCOUNTS=1` | Accounts on your own computer, with `DATABASE_URL` (on whenever hosted with a database). |
 | `APP_PASSWORD` | Hosted without a database: one password for every page (HTTP Basic sign-in), at least 12 characters. Ten wrong tries lock that address out for 15 minutes. Unused with accounts. |
 | `TRUST_PROXY_HOPS` | How many proxies in front of the app add to `X-Forwarded-For` (default 1 when listening publicly, as on Render; 0 on this computer). |

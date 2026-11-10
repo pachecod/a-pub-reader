@@ -70,6 +70,19 @@
   </section>
 </main>
 
+<div class="admin-main admin-main-more">
+  <section class="auth-card admin-card">
+    <h2>Publishers who opted out</h2>
+    <p class="muted admin-note">Sites whose owners asked to be left out. Their feeds cannot be added, existing
+      ones stop refreshing, their pages are never fetched, and they leave Find feeds. One site per line;
+      a site covers its subdomains (example.com covers www.example.com and feeds.example.com).
+      The public <a href="/about/fetching">About fetching</a> page tells publishers how to ask.</p>
+    <textarea id="optout-domains" class="admin-optout" rows="5" spellcheck="false" placeholder="example.com"></textarea>
+    <div class="account-actions"><button id="optout-save" type="button" class="primary">Save list</button></div>
+    <p id="optout-status" class="status" role="status" aria-live="polite"></p>
+  </section>
+</div>
+
 <!-- Shows a password once, after creating a user or resetting one. -->
 <dialog id="password-dialog" class="dialog">
   <h2 id="password-title">Password</h2>

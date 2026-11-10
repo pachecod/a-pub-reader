@@ -140,6 +140,8 @@ try {
   assert((await stranger.call('/style.css')).status === 200 && (await stranger.call('/signin.js')).status === 200, 'with its stylesheet and script');
   assert((await stranger.call('/app.js')).status === 302, "but not the app's own files");
   assert((await stranger.call('/admin')).status === 302 && (await stranger.call('/admin/admin.js')).status === 302, 'nor the admin page or its script');
+  const about = await stranger.call('/about/fetching');
+  assert(about.status === 200 && /A-PubReader\/2\.0/.test(about.text) && /robots\.txt/.test(about.text) && /boss@example\.com/.test(about.text), 'the About fetching page is public, naming the user agent and a contact for publishers');
   const me = await stranger.call('/api/auth/me');
   assert(me.data?.accounts === true && me.data.user === null, 'who-am-I says accounts are on and no one is signed in');
 
@@ -227,6 +229,25 @@ try {
   const read304 = await boss.call(`/read/${bossItem.id}`, { headers: { 'if-none-match': readTag } });
   assert(read304.status === 304 && /script-src 'self'/.test(read304.headers.get('content-security-policy') || ''), 'an unchanged read page answers 304 (without rebuilding it), keeping its security policy');
   assert((await reader.call(`/read/${bossItem.id}`, { headers: { 'if-none-match': readTag } })).status === 404, "a cached copy does not let someone else open the page");
+
+  console.log('\n== being a good citizen ==');
+  const feedAdd = await reader.call('/api/feeds/add', { method: 'POST', body: { url: 'https://203.0.113.5/feed.xml' } });
+  assert(feedAdd.status === 200 && feedAdd.data.feed.fullText === false, 'hosted, a new feed starts with the feed’s own text (full text off)');
+  const failing = feedAdd.data.feed.id;
+  const firstTry = await reader.call('/api/feeds/refresh', { method: 'POST', body: {} });
+  const failedFeed = (await reader.call('/api/feeds')).data.feeds.find((f) => f.id === failing);
+  assert(firstTry.data.results[0].ok === false && failedFeed.failures >= 1 && Date.parse(failedFeed.retryAfter) > Date.now(), 'a feed that fails is given a wait before the next automatic try');
+  const secondTry = await reader.call('/api/feeds/refresh', { method: 'POST', body: {} });
+  assert(/Skipped/.test(secondTry.data.results[0].error), 'refresh all leaves it alone while it waits');
+  const byHand = await reader.call('/api/feeds/refresh', { method: 'POST', body: { id: failing } });
+  assert(!/Skipped/.test(byHand.data.results[0].error || ''), 'refreshing that one feed by hand still tries');
+
+  assert((await reader.call('/api/admin/optout')).status === 403, 'only admins manage the opt-out list');
+  const optout = await boss.call('/api/admin/optout', { method: 'POST', body: { domains: 'https://www.Example-News.com/feed\nnot a domain\nexample-news.com' } });
+  assert(optout.status === 200 && optout.data.domains.join() === 'example-news.com', 'an admin lists a publisher who opted out (cleaned up and de-duplicated)');
+  const refused = await reader.call('/api/feeds/add', { method: 'POST', body: { url: 'https://feeds.example-news.com/rss' } });
+  assert(refused.status === 403 && /asked not to be included/.test(refused.data.error), 'its feeds, subdomains included, can no longer be added');
+  await boss.call('/api/admin/optout', { method: 'POST', body: { domains: [] } });
 
   console.log('\n== changing a password ==');
   const otherTab = browser();

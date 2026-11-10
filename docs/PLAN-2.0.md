@@ -301,6 +301,19 @@ problem or a full account.
 
 ---
 
+### Fetching and legal (built 2026-11-10)
+
+Honest user agent (`A-PubReader/2.0 (+…/about/fetching)`), a public About
+fetching page with the opt-out and DMCA contact (`CONTACT_EMAIL`, else
+`ADMIN_EMAIL`), robots.txt before article pages (RFC 9309), hosted full text
+off by default with per-library article caching, an admin opt-out list,
+conditional feed requests and backoff. Still to do outside the code:
+**register a DMCA designated agent** with the US Copyright Office for the
+hosted service, have Syracuse counsel review the full-text policy, and write
+the Terms of Use and Privacy pages (Phase 3, Legal pages): personal and
+non-commercial use, users responsible for what they add, a repeat-infringer
+policy, and what is stored.
+
 ## 7. Phase 4 — Google Analytics
 
 As WebXRIDE (`lib/analytics-config.js`, `analytics-html-inject.js`, commit

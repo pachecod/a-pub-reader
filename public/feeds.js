@@ -99,7 +99,8 @@
         const fullBox = document.createElement('input');
         fullBox.type = 'checkbox';
         fullBox.checked = feed.fullText !== false;
-        fullBox.title = 'Fetch each linked article instead of using the feed summary';
+        fullBox.title =
+          "Fetch each article's own page instead of using the feed's text, where the site allows it (robots.txt)";
         fullBox.addEventListener('change', () =>
           save(feed.id, { fullText: fullBox.checked })
         );
