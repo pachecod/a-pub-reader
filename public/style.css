@@ -1608,3 +1608,23 @@ h2, .column-title { color: var(--text); }
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.25);
 }
 @media (max-width: 480px) { .reading-thumb { width: 68px; } }
+
+/* Turning pages with a thumb (see pageDrag in app.js): a sideways swipe on
+   the page belongs to the page, so the browser does not scroll or go back
+   with it; up-and-down and pinch-zoom stay the browser's. The first line is
+   for browsers that do not know pinch-zoom here. */
+.viewer-text.page-mode,
+.viewer-stage > img {
+  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
+}
+/* On a touch screen, a press-and-swipe should not start selecting text or
+   pop up the long-press menu. */
+@media (pointer: coarse) {
+  .viewer-text.page-mode,
+  .viewer-stage > img {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}

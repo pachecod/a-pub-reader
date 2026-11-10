@@ -1447,64 +1447,110 @@ function step(delta) {
   if (page && change) turnPage(page, delta, change);
 }
 
-// Turning by hand: press near the right edge of the page and drag left to
-// turn forward, or near the left edge and drag right to turn back. A tap in
-// those edges turns the page too. Only with the corner curl.
+// Turning by hand.
+//
+// With a mouse: press near the right edge of the page and drag left to turn
+// forward, or near the left edge and drag right to turn back; a click in
+// those edges turns too.
+//
+// With a thumb (touch, or a pen): swipe anywhere on the page. The first
+// movement decides: mostly sideways turns the page (left for the next, right
+// for the previous), mostly up or down is left to the browser. The corner
+// follows the thumb at a faster rate, so about half the screen's width turns
+// it over, and a quick flick turns it even if short. A tap in the right third
+// turns forward, in the left third back. Without the curl (Swing or None),
+// a swipe still turns the page, just without being dragged.
 (function pageDrag() {
   const stage = el.viewer.querySelector('.viewer-stage');
   const EDGE = 0.22;
+  const TAP_ZONE = 1 / 3;
+  const SLOP = 10;
+  const SWIPE_MIN = 40;
+  const FLICK = 0.45; // px per ms
   let drag = null;
 
-  /** Which way a press at this point would turn, or 0. */
-  function edgeAt(event) {
+  const curlOn = () => turnStyle === 'curl' && !reduceMotion.matches;
+
+  /** Whether a press here starts a turn, and what a tap would do. */
+  function pressAt(event) {
     const page = currentPage();
-    if (!page || page.hidden || turnStyle !== 'curl' || reduceMotion.matches) return null;
+    if (!page || page.hidden) return null;
     if (!page.contains(event.target) || event.target.closest('a, button, input, select, textarea')) return null;
     const rect = page.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width;
+    if (event.pointerType !== 'mouse') {
+      return { page, rect, touch: true, tap: x > 1 - TAP_ZONE ? 1 : x < TAP_ZONE ? -1 : 0, delta: 0 };
+    }
+    if (!curlOn()) return null;
     const delta = x > 1 - EDGE ? 1 : x < EDGE ? -1 : 0;
-    return delta ? { page, delta, rect } : null;
+    return delta ? { page, rect, touch: false, tap: delta, delta } : null;
+  }
+
+  /** Where the corner is for the pointer's travel so far. */
+  function cornerFor(d, live) {
+    if (d.touch) {
+      // A thumb starts anywhere, so the corner moves faster than it does.
+      return d.delta > 0
+        ? { x: live.W + d.dx * 1.8, y: d.dy * 0.6 }
+        : { x: -live.W + d.dx * 2.2, y: d.dy * 0.6 };
+    }
+    // A mouse holds the corner: forward it follows the pointer; back it comes
+    // from off the left of the page, so it travels twice as far.
+    return d.delta > 0 ? { x: live.W + d.dx, y: d.dy } : { x: -live.W + 2 * d.dx, y: d.dy };
+  }
+
+  /** Sideways speed over the last moment of the drag, in px per ms. */
+  function speed(d) {
+    const recent = d.samples.filter((s) => d.samples.at(-1).t - s.t <= 90);
+    if (recent.length < 2) return 0;
+    const first = recent[0];
+    const last = recent.at(-1);
+    return (last.x - first.x) / Math.max(1, last.t - first.t);
   }
 
   stage.addEventListener('pointermove', (event) => {
     if (!drag) {
-      // A hint that the edges can be taken hold of.
-      const edge = event.pointerType === 'mouse' ? edgeAt(event) : null;
-      stage.style.cursor = edge ? 'grab' : '';
+      // With a mouse, a hint that the edges can be taken hold of.
+      const press = event.pointerType === 'mouse' ? pressAt(event) : null;
+      stage.style.cursor = press ? 'grab' : '';
       return;
     }
     if (event.pointerId !== drag.id) return;
     drag.dx = event.clientX - drag.x;
     drag.dy = event.clientY - drag.y;
-    if (!drag.live) {
+    drag.samples.push({ t: event.timeStamp, x: event.clientX });
+    if (drag.samples.length > 12) drag.samples.shift();
+
+    if (!drag.started) {
       // Not a drag until it has moved a little; a tap stays a tap.
-      if (Math.hypot(drag.dx, drag.dy) < 6) return;
-      const change = pageChange(drag.delta);
-      if (!change) {
-        drag = null;
-        return;
+      if (Math.hypot(drag.dx, drag.dy) < SLOP) return;
+      if (drag.touch) {
+        // Mostly up or down: not a page turn.
+        if (Math.abs(drag.dy) > Math.abs(drag.dx)) {
+          drag = null;
+          return;
+        }
+        drag.delta = drag.dx < 0 ? 1 : -1;
       }
-      stage.setPointerCapture?.(event.pointerId);
-      stage.style.cursor = 'grabbing';
-      drag.live = beginCurl(drag.page, drag.delta, change);
+      drag.started = true;
+      drag.change = pageChange(drag.delta);
+      if (drag.change && curlOn()) {
+        stage.setPointerCapture?.(event.pointerId);
+        if (!drag.touch) stage.style.cursor = 'grabbing';
+        drag.live = beginCurl(drag.page, drag.delta, drag.change);
+      }
     }
-    drag.live.then((live) => live && drag && live.follow(cornerFor(drag, live)));
+    // The browser leaves a sideways swipe to the page (touch-action), but say
+    // so here as well, for browsers that ask.
+    if (drag.touch && event.cancelable) event.preventDefault();
+    drag.live?.then((live) => live && drag && live.follow(cornerFor(drag, live)));
   });
 
-  /** Where the corner is for the pointer's travel so far. */
-  function cornerFor(d, live) {
-    // Forward, the corner follows the pointer; back, it comes from off the
-    // left of the page, so it travels twice as far as the pointer.
-    return d.delta > 0
-      ? { x: live.W + d.dx, y: d.dy }
-      : { x: -live.W + 2 * d.dx, y: d.dy };
-  }
-
   stage.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || drag) return;
-    const edge = edgeAt(event);
-    if (!edge) return;
-    drag = { ...edge, id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0, live: null };
+    if ((event.pointerType === 'mouse' && event.button !== 0) || drag) return;
+    const press = pressAt(event);
+    if (!press) return;
+    drag = { ...press, id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0, started: false, live: null, change: null, samples: [{ t: event.timeStamp, x: event.clientX }] };
   });
 
   function release(event, cancelled) {
@@ -1512,17 +1558,24 @@ function step(delta) {
     const d = drag;
     drag = null;
     stage.style.cursor = '';
+    if (!d.started) {
+      // A tap: at the edges (mouse) or in the outer thirds (touch).
+      if (!cancelled && d.tap) step(d.tap);
+      return;
+    }
+    // A flick in the turning direction completes, however short.
+    const flick = d.touch && (d.delta > 0 ? speed(d) < -FLICK : speed(d) > FLICK);
     if (!d.live) {
-      // A tap at the edge turns the page.
-      if (!cancelled) step(d.delta);
+      // No curl to drag (Swing or None): a clear swipe turns the page.
+      if (!cancelled && d.change && (flick || Math.abs(d.dx) >= SWIPE_MIN)) step(d.delta);
       return;
     }
     d.live.then((live) => {
       if (!live) return;
       const corner = cornerFor(d, live);
-      // Past halfway, it goes over; short of it, it falls back.
-      const complete = !cancelled && (d.delta > 0 ? corner.x < live.W * 0.5 : corner.x > -live.W * 0.5);
-      live.settle(complete, () => pageChange(-d.delta)?.());
+      // Past halfway it goes over; short of it, it falls back, unless flicked.
+      const far = d.delta > 0 ? corner.x < live.W * 0.5 : corner.x > -live.W * 0.5;
+      live.settle(!cancelled && (far || flick), () => pageChange(-d.delta)?.());
     });
   }
   stage.addEventListener('pointerup', (event) => release(event, false));
