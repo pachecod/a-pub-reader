@@ -870,11 +870,23 @@ async function refreshTargets(targets, { manual = false } = {}) {
 // ---- pictures for a feed edition's articles (the web view's thumbnails)
 //
 // The picture each item names in the feed is downloaded once, while the
-// edition is built, made into a JPEG of at most 960 px, and kept with the
-// edition; the app serves it from there, so the publisher's server is not
-// asked again each time someone looks, and does not see who reads what. The
-// EPUB for the reader stays text-only.
-const IMAGE_BYTES = 8 * 1024 * 1024;
+// edition is built, and kept with the edition as it came (JPEG, PNG, WebP or
+// GIF, up to 1.5 MB; anything else or larger is skipped); the app serves it
+// from there, so the publisher's server is not asked again each time someone
+// looks, and does not see who reads what. Pictures are not decoded or resized
+// here: that takes a lot of memory, and a small hosted server ran out of it
+// during refreshes. The browser sizes them. The EPUB stays text-only.
+const IMAGE_BYTES = 1.5 * 1024 * 1024;
+
+/** A picture's type from its first bytes, or '' if it is not one the web view shows. */
+function pictureType(data) {
+  if (data.length < 12) return '';
+  if (data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
+  if (data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (data.subarray(0, 4).toString('latin1') === 'GIF8') return 'image/gif';
+  if (data.subarray(0, 4).toString('latin1') === 'RIFF' && data.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  return '';
+}
 const IMAGE_TIME_MS = 12000;
 const IMAGES_BUDGET_MS = 45000;
 
@@ -896,8 +908,8 @@ async function fetchArticleImages(items) {
           headers: { 'user-agent': userAgent(), accept: 'image/avif,image/webp,image/jpeg,image/png,image/*;q=0.8' },
         });
         if (!res.ok || !/^image\//i.test(res.headers.get('content-type') || '')) continue;
-        const picture = await normalizeForDevice(Buffer.from(await res.arrayBuffer()), { maxWidth: 960, maxHeight: 960 });
-        if (picture?.data?.length) found.set(index + 1, picture.data);
+        const data = Buffer.from(await res.arrayBuffer());
+        if (pictureType(data)) found.set(index + 1, data);
       } catch {
         /* no picture for this one */
       }
@@ -2404,8 +2416,9 @@ async function routeRequest(req, res, url, key, ip) {
   if (req.method === 'GET' && imageMatch) {
     const entry = await outbox.get(imageMatch[1]);
     const data = entry ? await outbox.readImage(entry, imageMatch[2]).catch(() => null) : null;
-    if (!data) return send(res, 404, 'text/plain', 'Not found');
-    res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': data.length, 'cache-control': 'private, max-age=31536000, immutable' });
+    const type = data ? pictureType(data) : '';
+    if (!type) return send(res, 404, 'text/plain', 'Not found');
+    res.writeHead(200, { 'content-type': type, 'content-length': data.length, 'cache-control': 'private, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' });
     return res.end(data);
   }
 

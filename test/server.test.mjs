@@ -575,7 +575,7 @@ try {
     assert(edition.articles.filter((a) => a.image).length === 1, 'only articles with a picture have one');
     const pictureRes = await fetch(`http://127.0.0.1:${APP_PORT}${pictured.image}`);
     const pictureBytes = Buffer.from(await pictureRes.arrayBuffer());
-    assert(pictureRes.ok && pictureRes.headers.get('content-type') === 'image/jpeg' && pictureBytes[0] === 0xff && pictureBytes[1] === 0xd8, 'and serves it as a JPEG');
+    assert(pictureRes.ok && pictureRes.headers.get('content-type') === 'image/png' && pictureBytes.equals(picturePng), 'and serves it as it came, with its own type (not decoded or resized)');
     const readHtml = await (await fetch(`http://127.0.0.1:${APP_PORT}/read/${edition.id}`)).text();
     assert(readHtml.includes(`<figure class="lead-image"><img src="${pictured.image}"`), 'the reading page shows it inline in the article');
     const fresh = (await api('/api/feeds/check')).body.feeds.find((f) => f.feedId === standIn.id);
