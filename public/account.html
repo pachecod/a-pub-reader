@@ -56,6 +56,35 @@
   </section>
 
   <section class="auth-card account-card">
+    <h2>Reader access (OPDS)</h2>
+    <p class="muted">Let an e-reader browse your library and download new editions straight from
+      here, over Wi-Fi, with no computer in between: the Xteink with CrossPoint, KOReader on a Boox,
+      and other readers with an OPDS catalog.</p>
+    <dl class="reader-access">
+      <dt>Catalog address</dt><dd><code id="reader-catalog"></code></dd>
+      <dt>Username</dt><dd><code id="reader-username"></code></dd>
+      <dt>Password</dt><dd id="reader-password">A reader key (below), not your account password.</dd>
+    </dl>
+    <p id="reader-state" class="muted"></p>
+    <p id="reader-key-box" class="admin-password" hidden><code id="reader-key"></code></p>
+    <p id="reader-key-note" class="muted" hidden>Type this on the reader as the password. It is shown only now; if you lose it, make a new one.</p>
+    <div class="account-actions">
+      <button id="reader-make" type="button" class="primary">Make a reader key</button>
+      <button id="reader-remove" type="button" class="secondary" hidden>Turn off reader access</button>
+    </div>
+    <details class="reader-steps">
+      <summary>Setting it up on the Xteink (CrossPoint)</summary>
+      <ol>
+        <li>Make a reader key here.</li>
+        <li>On the reader, open the OPDS browser's settings and add a server.</li>
+        <li>Enter the catalog address, your username, and the reader key as the password.</li>
+        <li>Open the server: Newest lists everything; choose an item to download it.</li>
+      </ol>
+    </details>
+    <p id="reader-status" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="auth-card account-card">
     <h2>Signing out</h2>
     <p id="account-sessions" class="muted"></p>
     <div class="account-actions">

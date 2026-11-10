@@ -104,6 +104,21 @@ another person's items, even knowing their address.
 - The first admin, made from `ADMIN_USERNAME`/`ADMIN_PASSWORD`, takes over the
   library the install had before accounts, so a trial library carries on.
 
+### Reading on an e-reader without a computer (OPDS)
+
+Hosted, each library is also an **OPDS catalog** at `/opds`, which e-readers
+browse and download from over Wi-Fi: the Xteink with CrossPoint (its OPDS
+browser, up to 8 saved catalogs), KOReader on a Boox, and others. Under
+**Your account → Reader access**, make a **reader key** and enter the catalog
+address, your username and that key (as the password) on the reader.
+
+- Sections: Newest, Feed editions (the latest of each), Documents, Books and
+  Notes; each item downloads as its EPUB. Only your own library appears.
+- The key is separate from your password, because a reader keeps it on its
+  card: 20 lower-case letters and digits in groups of four (no look-alikes),
+  stored only as a SHA-256, shown once, replaced or turned off any time. Ten
+  wrong tries pause access for 15 minutes.
+
 ### Fetching politely
 
 The app identifies itself as `A-PubReader/2.0 (+<site>/about/fetching)`, not as

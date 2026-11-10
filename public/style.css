@@ -1578,3 +1578,12 @@ h2, .column-title { color: var(--text); }
 .feed-waiting .reading-feed-head { border-bottom-color: var(--line-strong); }
 .feed-waiting-note { display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem; margin: 0.7rem 0 0.2rem; color: var(--muted); font-size: 0.88rem; }
 .feed-waiting-note .link { font-size: 0.88rem; }
+
+/* Reader access (OPDS) on Your account. */
+.reader-access { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 0.9rem; margin: 0.8rem 0; font-size: 0.88rem; }
+.reader-access dt { color: var(--muted); }
+.reader-access dd { margin: 0; overflow-wrap: anywhere; }
+.reader-access code { font-size: 0.86rem; }
+.reader-steps { margin-top: 0.9rem; font-size: 0.86rem; }
+.reader-steps summary { cursor: pointer; color: var(--accent); }
+.reader-steps ol { margin: 0.5rem 0 0; padding-left: 1.2rem; }

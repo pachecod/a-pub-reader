@@ -34,6 +34,7 @@ import { hashPassword, passwordProblem, readablePassword, verifyPassword } from 
 import { lookupKey, openPassword, sealPassword } from './lib/accounts/lookup.mjs';
 import { mediaTypeFor, readChapter, readEpub, readEpubFile } from './lib/epubread.mjs';
 import { renderWebPage } from './lib/webread.mjs';
+import { OPDS_ACQUISITION, OPDS_NAVIGATION, acquisitionFeed, navigationFeed } from './lib/opds.mjs';
 import { SUMMARY_VERSION, pruneSummaries, savedSummary, summarize } from './lib/summary.mjs';
 import { discoverFeeds } from './lib/discover.mjs';
 import { explainHttpFailure } from './lib/httperror.mjs';
@@ -264,7 +265,7 @@ const PUBLIC_PATHS = new Set([
 
 /** A user as their own page and the admin page see them. */
 const userView = (user) =>
-  user && { id: user.id, username: user.username, email: user.email, role: user.role, adminSetPassword: user.adminSetPassword };
+  user && { id: user.id, username: user.username, email: user.email, role: user.role, adminSetPassword: user.adminSetPassword, readerKey: user.readerKey || null };
 const ownerContext = new AsyncLocalStorage();
 /** The current owner's stores. */
 const stores = () => backend.forOwner(ownerContext.getStore() || DEFAULT_OWNER);
@@ -1129,6 +1130,7 @@ const routes = {
       accounts: Boolean(accounts),
       user: userView(req.user || null),
       sessions: req.user ? await accounts.countSessions(req.user.id) : 0,
+      catalog: req.user ? `${SITE_URL ? SITE_URL.replace(/\/+$/, '') : `${req.secure ? 'https' : 'http'}://${req.headers.host}`}/opds` : null,
     }),
 
   'POST /api/auth/password': async (req) => {
@@ -1143,6 +1145,19 @@ const routes = {
     // Other browsers signed in with the old password are signed out.
     const signedOut = await accounts.deleteUserSessions(req.user.id, { keep: req.sessionId });
     return json(200, { ok: true, signedOut });
+  },
+
+  // A reader key, for an e-reader browsing the library as an OPDS catalog.
+  'POST /api/auth/reader-key': async (req) => {
+    if (!req.user) throw httpError(401, 'Sign in first.');
+    const key = await accounts.newReaderKey(req.user.id);
+    const base = SITE_URL ? SITE_URL.replace(/\/+$/, '') : `${req.secure ? 'https' : 'http'}://${req.headers.host}`;
+    return json(200, { key, catalog: `${base}/opds`, username: req.user.username });
+  },
+  'POST /api/auth/reader-key/remove': async (req) => {
+    if (!req.user) throw httpError(401, 'Sign in first.');
+    await accounts.removeReaderKey(req.user.id);
+    return json(200, { ok: true });
   },
 
   'GET /account': async () => {
@@ -2057,6 +2072,132 @@ function handle(req, res) {
   return handleRequest(req, res);
 }
 
+// ---------------------------------------------------------------- OPDS
+//
+// /opds is a navigation feed of sections; /opds/<section> lists items, newest
+// first, each linking to /opds/epub/<id>. Only the signed-in reader's library.
+
+const OPDS_SECTIONS = [
+  { key: 'new', title: 'Newest', content: 'Everything, newest first', test: () => true },
+  { key: 'feeds', title: 'Feed editions', content: 'The latest edition of each feed', test: (i) => i.source?.kind === 'feed' },
+  { key: 'documents', title: 'Documents', content: 'PDFs, web pages and links you converted', test: (i) => !['feed', 'draft', 'book'].includes(i.source?.kind) },
+  { key: 'books', title: 'Books', content: 'Books from Find books', test: (i) => i.source?.kind === 'book' },
+  { key: 'notes', title: 'Notes', content: 'What you wrote', test: (i) => i.source?.kind === 'draft' },
+];
+
+/** The username and password of an HTTP Basic header, or null. */
+function basicCredentials(req) {
+  const header = String(req.headers.authorization || '');
+  if (!header.startsWith('Basic ')) return null;
+  const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+  const at = decoded.indexOf(':');
+  return at < 0 ? null : { login: decoded.slice(0, at), key: decoded.slice(at + 1) };
+}
+
+function askForReaderKey(res, message = 'Sign in with your username and reader key (Your account → Reader access).') {
+  res.writeHead(401, {
+    'www-authenticate': 'Basic realm="A-Pub Reader library", charset="UTF-8"',
+    'content-type': 'text/plain; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  return res.end(message);
+}
+
+/** The items a reader sees: every item, with only the newest edition of each feed. */
+async function opdsItems() {
+  const seen = new Set();
+  return (await outbox.list()).filter((item) => {
+    const feedId = item.source?.feedId;
+    if (!feedId) return true;
+    if (seen.has(feedId)) return false;
+    seen.add(feedId);
+    return true;
+  });
+}
+
+async function opdsEntry(item, base) {
+  const summary = await summarize(item, () => outbox.readEpub(item)).catch(() => null);
+  const isFeed = item.source?.kind === 'feed';
+  const day = item.builtAt ? new Date(item.builtAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  return {
+    id: `urn:uuid:${item.id}`,
+    title: isFeed && day ? `${item.title} · ${day}` : item.title,
+    author: summary?.author || (isFeed ? item.title : ''),
+    updated: item.builtAt,
+    summary: isFeed
+      ? (summary?.articles || []).slice(0, 6).map((a) => `• ${a.title}`).join('\n')
+      : summary?.excerpt || '',
+    href: `${base}/opds/epub/${item.id}`,
+    size: item.size,
+  };
+}
+
+async function opdsRequest(req, res, url, ip) {
+  const given = basicCredentials(req);
+  if (!given) return askForReaderKey(res);
+  const who = given.login.trim().toLowerCase().slice(0, 254);
+  const limited = [loginFailures.blocked(`opds-ip:${ip}`), loginFailures.blocked(`opds:${who}`)].find((l) => l.blocked);
+  if (limited) {
+    res.writeHead(429, { 'retry-after': String(limited.retryAfter), 'content-type': 'text/plain; charset=utf-8' });
+    return res.end('Too many tries. Wait a few minutes and try again.');
+  }
+  const user = await accounts.readerKeyUser(who, given.key);
+  if (!user) {
+    loginFailures.hit(`opds-ip:${ip}`);
+    if (who) loginFailures.hit(`opds:${who}`);
+    return askForReaderKey(res, 'That username or reader key is not right.');
+  }
+
+  return ownerContext.run(user.library, async () => {
+    // Absolute links: some readers resolve relative ones badly.
+    const base = SITE_URL ? SITE_URL.replace(/\/+$/, '') : `${req.secure ? 'https' : 'http'}://${req.headers.host}`;
+    const items = await opdsItems();
+    const newest = items[0]?.builtAt || new Date().toISOString();
+
+    if (url.pathname === '/opds' || url.pathname === '/opds/') {
+      const sections = OPDS_SECTIONS.map((section) => {
+        const count = items.filter(section.test).length;
+        return { id: `urn:apub:${user.id}:${section.key}`, title: `${section.title} (${count})`, content: section.content, href: `${base}/opds/${section.key}` };
+      });
+      const payload = navigationFeed({ id: `urn:apub:${user.id}`, title: `${user.username}'s A-Pub library`, updated: newest, selfHref: `${base}/opds`, sections });
+      res.writeHead(200, { 'content-type': `${OPDS_NAVIGATION};charset=utf-8`, 'cache-control': 'private, no-store' });
+      return res.end(payload);
+    }
+
+    const section = OPDS_SECTIONS.find((s) => url.pathname === `/opds/${s.key}`);
+    if (section) {
+      const chosen = items.filter(section.test).slice(0, 200);
+      const entries = [];
+      for (const item of chosen) entries.push(await opdsEntry(item, base));
+      const payload = acquisitionFeed({
+        id: `urn:apub:${user.id}:${section.key}`,
+        title: section.title,
+        updated: chosen[0]?.builtAt || newest,
+        selfHref: `${base}/opds/${section.key}`,
+        startHref: `${base}/opds`,
+        entries,
+      });
+      res.writeHead(200, { 'content-type': `${OPDS_ACQUISITION};charset=utf-8`, 'cache-control': 'private, no-store' });
+      return res.end(payload);
+    }
+
+    const download = /^\/opds\/epub\/([0-9a-f-]{36})(?:\.epub)?$/i.exec(url.pathname);
+    if (download) {
+      const item = await outbox.get(download[1]);
+      if (!item) return send(res, 404, 'text/plain', 'That item is no longer in your library.');
+      const data = await outbox.readEpub(item);
+      res.writeHead(200, {
+        'content-type': MIME['.epub'],
+        'content-length': data.length,
+        'content-disposition': `attachment; filename="${String(item.filename || 'book.epub').replace(/["\\]/g, '')}"`,
+        'cache-control': 'private, no-store',
+      });
+      return res.end(data);
+    }
+    return send(res, 404, 'text/plain', 'Not found');
+  });
+}
+
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const key = `${req.method} ${url.pathname}`;
@@ -2076,6 +2217,13 @@ async function handleRequest(req, res) {
   if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, 'text/plain', 'ok');
 
   req.secure = https || (HOSTED && !LOOPBACK);
+
+  // The library as an OPDS catalog, for e-readers: signed in with HTTP Basic
+  // (username and reader key) rather than a session cookie.
+  if (url.pathname === '/opds' || url.pathname.startsWith('/opds/')) {
+    if (!accounts || req.method !== 'GET') return send(res, 404, 'text/plain', 'Not found');
+    return opdsRequest(req, res, url, ip);
+  }
 
   if (accounts) {
     // Signed in? Everything but the sign-in page and its files needs it.
@@ -2116,7 +2264,7 @@ async function handleRequest(req, res) {
 
   // Without accounts there is no admin area and no account to manage.
   if (!accounts && (url.pathname === '/admin' || url.pathname.startsWith('/admin/') || url.pathname.startsWith('/api/admin/') ||
-      ['POST /api/auth/password', 'POST /api/auth/signout-everywhere'].includes(key))) {
+      ['POST /api/auth/password', 'POST /api/auth/signout-everywhere', 'POST /api/auth/reader-key', 'POST /api/auth/reader-key/remove'].includes(key))) {
     return send(res, 404, 'text/plain', 'Not found');
   }
 
