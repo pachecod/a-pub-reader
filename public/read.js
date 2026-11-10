@@ -196,6 +196,7 @@
       lastItems = items;
       followedFeeds = followed.feeds || [];
       draw(items, lastReading);
+      startMissingEditions(items);
 
       if (pendingEpub) {
         const wanted = items.find((i) => i.id === pendingEpub);
@@ -214,6 +215,20 @@
       el.booksEmpty.querySelector('p').textContent = err.message;
     } finally {
       el.refresh.disabled = false;
+    }
+  }
+
+  /**
+   * A feed that was added but never built (its first build was started by a
+   * page that was then closed or reloaded) gets its first edition now. Only
+   * feeds never refreshed: one whose build failed waits for Refresh feeds.
+   */
+  function startMissingEditions(items) {
+    const built = new Set(items.map((i) => i.source?.feedId).filter(Boolean));
+    const building = new Set(window.epubDropFeeds?.building?.() || []);
+    for (const feed of followedFeeds) {
+      if (built.has(feed.id) || building.has(feed.id) || feed.lastRefreshedAt || feed.lastError) continue;
+      window.epubDropFeeds?.buildFirstEdition?.(feed);
     }
   }
 
@@ -324,7 +339,9 @@
       el.books.replaceChildren(...books.map(draw));
       el.docs.replaceChildren(...docs.map(draw));
       el.notes.replaceChildren(...notes.map(draw));
-      el.feeds.replaceChildren(...waiting.map((f) => waitingBlock(f, buildingNow.has(f.id))), ...feeds.map(draw));
+      // Feeds with something to read first; those still waiting come after,
+      // so they never push the real editions out of the way.
+      el.feeds.replaceChildren(...feeds.map(draw), ...waiting.map((f) => waitingBlock(f, buildingNow.has(f.id))));
       showNewCounts();
     }
   }

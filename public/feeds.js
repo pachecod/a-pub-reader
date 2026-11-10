@@ -441,6 +441,10 @@
     },
     /** Feeds whose first edition is being built right now. */
     building: () => [...building],
+    /** Build a feed's first edition (the Library asks for ones never built). */
+    buildFirstEdition: (feed) => {
+      if (!building.has(feed.id)) buildFirstEdition(feed);
+    },
   };
 
   // Feeds refresh only when asked (Refresh feeds in the Library, Refresh all
