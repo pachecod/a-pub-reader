@@ -38,6 +38,8 @@
     summary: $('library-summary'),
     download: $('library-download'),
     feedsNew: $('feeds-new'),
+    feedsNewWrap: $('feeds-new-wrap'),
+    feedsNewList: $('feeds-new-list'),
     addLinks: $('library-add'),
     layout: $('read-layout'),
     side: $('read-side'),
@@ -320,6 +322,8 @@
 
   const CHECK_EVERY_MS = 15 * 60 * 1000;
   let newCounts = new Map();
+  // Feed titles from the last check, for the list behind the total.
+  let newTitles = new Map();
   // The new articles themselves, per feed: listed at the top of its box, tagged
   // New, until a refresh brings them into the edition.
   let newArticles = new Map();
@@ -362,9 +366,10 @@
 
   function showNewCounts() {
     const total = [...newCounts.values()].reduce((n, c) => n + c, 0);
-    el.feedsNew.hidden = total === 0;
+    el.feedsNewWrap.hidden = total === 0;
     el.feedsNew.textContent = `${total} new`;
-    el.feedsNew.title = `${total} newer article${total === 1 ? '' : 's'} in your feeds than in the editions here — Refresh feeds to get them`;
+    el.feedsNew.setAttribute('aria-label', `${total} new article${total === 1 ? '' : 's'} in your feeds; show which`);
+    showNewList();
 
     for (const li of el.feeds.querySelectorAll('.library-block[data-feed-id]')) {
       const count = newCounts.get(li.dataset.feedId) || 0;
@@ -391,12 +396,79 @@
     }
   }
 
+  /** The list behind the total: each feed with something new, most first. */
+  function showNewList() {
+    const rows = [...newCounts]
+      .filter(([, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1]);
+    const head = document.createElement('p');
+    head.className = 'new-popover-head';
+    head.textContent = 'New since your editions';
+    const list = document.createElement('ul');
+    for (const [feedId, count] of rows) {
+      const li = document.createElement('li');
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'new-popover-feed';
+      const name = document.createElement('span');
+      name.textContent = newTitles.get(feedId) || 'A feed';
+      const n = document.createElement('span');
+      n.className = 'new-popover-count';
+      n.textContent = `${count} new`;
+      go.append(name, n);
+      // Jump to that feed's box, where the new headlines are listed.
+      go.addEventListener('click', () => {
+        closeNewList();
+        const block = el.feeds.querySelector(`.library-block[data-feed-id="${CSS.escape(feedId)}"]`);
+        block?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      li.appendChild(go);
+      list.appendChild(li);
+    }
+    const foot = document.createElement('p');
+    foot.className = 'new-popover-foot';
+    foot.textContent = 'Refresh feeds to add them to your editions.';
+    el.feedsNewList.replaceChildren(head, list, foot);
+  }
+
+  // Hover shows the list (CSS); a click or tap pins it open, for touch screens
+  // and keyboards, and a click elsewhere or Escape closes it.
+  const closeNewList = () => {
+    el.feedsNewWrap.classList.remove('is-open');
+    el.feedsNew.setAttribute('aria-expanded', 'false');
+  };
+  // The list hangs from the right of the pill; on a narrow screen that can
+  // push it off the left edge, so slide it back into view.
+  const placeNewList = () => {
+    el.feedsNewList.style.right = '0px';
+    const left = el.feedsNewList.getBoundingClientRect().left;
+    if (left < 8) el.feedsNewList.style.right = `${left - 8}px`;
+  };
+  el.feedsNewWrap.addEventListener('mouseenter', placeNewList);
+  el.feedsNewWrap.addEventListener('focusin', placeNewList);
+  el.feedsNew.addEventListener('click', () => {
+    placeNewList();
+    const open = !el.feedsNewWrap.classList.contains('is-open');
+    el.feedsNewWrap.classList.toggle('is-open', open);
+    el.feedsNew.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('#feeds-new-wrap')) closeNewList();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && el.feedsNewWrap.classList.contains('is-open')) {
+      closeNewList();
+      el.feedsNew.focus();
+    }
+  });
+
   async function checkForNew() {
     if (checking) return checking;
     checking = (async () => {
       try {
         const { feeds } = await api('/api/feeds/check');
         newCounts = new Map(feeds.map((f) => [f.feedId, f.newCount]));
+        newTitles = new Map(feeds.map((f) => [f.feedId, f.title]));
         newArticles = new Map(feeds.map((f) => [f.feedId, f.articles || []]));
       } catch {
         // Offline (the reader's hotspot, say): keep whatever was known.

@@ -622,6 +622,66 @@ a { color: var(--accent); }
 @media (prefers-color-scheme: dark) { .new-count { color: #10131a; } }
 .reading-feed-head .new-count { margin-left: auto; }
 
+/* The total beside Refresh feeds is a button; hovering it (or a tap) lists
+   which feeds have the new articles. */
+.new-menu { position: relative; display: inline-flex; align-items: center; }
+.new-menu[hidden] { display: none; }
+.new-menu > .new-count { border: 0; font-family: inherit; line-height: 1.5; cursor: pointer; }
+.new-menu > .new-count:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.new-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  min-width: 15rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  /* The gap above is padding, so the pointer can cross it without closing. */
+  margin-top: 0;
+  padding: 0.6rem 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18);
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: left;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.12s, transform 0.12s, visibility 0s linear 0.12s;
+}
+.new-popover::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+.new-menu:hover .new-popover,
+.new-menu:focus-within .new-popover,
+.new-menu.is-open .new-popover {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(8px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+@media (prefers-reduced-motion: reduce) { .new-popover { transition: none; } }
+.new-popover-head { margin: 0 0 0.35rem; padding: 0 0.9rem; color: var(--muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.new-popover ul { list-style: none; margin: 0; padding: 0; }
+.new-popover-feed {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.38rem 0.9rem;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.new-popover-feed:hover, .new-popover-feed:focus-visible { background: var(--panel-2, rgba(127, 127, 127, 0.1)); color: var(--accent); outline: none; }
+.new-popover-feed span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new-popover-count { flex: none; color: var(--accent); font-weight: 600; font-size: 0.78rem; }
+.new-popover-foot { margin: 0.4rem 0 0; padding: 0.45rem 0.9rem 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
+
 /* New articles not in the edition yet, at the top of a feed's box. */
 .reading-new { border-bottom: 1px dashed var(--line-strong); }
 .reading-article.is-new .reading-article-title { display: inline; }

@@ -99,7 +99,12 @@
             <!-- Feeds refresh only when asked. The count says how many newer
                  articles the feeds have than the editions here. -->
             <div class="row-tight">
-              <span id="feeds-new" class="new-count" hidden></span>
+              <!-- Hover, focus or tap shows which feeds have the new articles. -->
+              <span id="feeds-new-wrap" class="new-menu" hidden>
+                <button id="feeds-new" type="button" class="new-count"
+                        aria-expanded="false" aria-controls="feeds-new-list"></button>
+                <div id="feeds-new-list" class="new-popover" role="group" aria-label="Feeds with new articles"></div>
+              </span>
               <button id="read-refresh" type="button" class="secondary">Refresh feeds</button>
             </div>
           </div>
