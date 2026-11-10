@@ -61,6 +61,7 @@ const el = {
   typeLeading: $('type-leading'),
   typeAlign: $('type-align'),
   typeReset: $('type-reset'),
+  typeTurn: $('type-turn'),
   viewerClip: $('viewer-clip'),
   viewerFlow: $('viewer-flow'),
 };
@@ -1011,47 +1012,98 @@ async function showChapter(at = 'start') {
 
 // ---- page-turn effect
 //
-// Like leafing through a book, the spine is always on the left. Going forward,
-// a snapshot of the page being left is laid over the frame, the frame moves to
-// the next page underneath, and the snapshot swings away to the left. Going
-// back, the snapshot stays put underneath while the previous page swings in
-// from the left and settles on top of it. It is decoration only — the page has
-// already changed by the time it starts — so a fast reader holding an arrow key
-// just cuts the previous turn short.
+// Like a book, the spine is on the left. The default, "Corner curl", peels the
+// page back from its top-right corner: a fold line sweeps across the page, the
+// part beyond it lifts over and shows its back (the print faintly mirrored, as
+// through thin paper), and the next page is revealed underneath with a shadow
+// along the fold. Going back runs the same turn in reverse, laying the
+// previous page back down over the current one. "Swing" is the older effect,
+// the whole page swinging about the spine; "None" just changes the page.
+//
+// With the curl, the page can also be turned by hand: press near the right
+// edge and drag left (or near the left edge and drag right), and the corner
+// follows the pointer; let go past halfway and it completes, short of that it
+// falls back. A tap in those edge zones turns the page.
+//
+// It is decoration only — the page has already changed underneath by the time
+// a turn starts — so a fast reader holding an arrow key just cuts the previous
+// turn short.
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 let turning = null;
 
+const TURN_KEY = 'apub.pageTurn';
+const TURN_STYLES = ['curl', 'swing', 'none'];
+let turnStyle = 'curl';
+try {
+  const saved = localStorage.getItem(TURN_KEY);
+  if (TURN_STYLES.includes(saved)) turnStyle = saved;
+} catch {
+  /* the default is fine */
+}
+
 function finishTurn() {
-  turning?.animation?.cancel();
-  turning?.leaf.remove();
-  turning?.page.classList.remove('page-arriving');
-  if (turning) turning.page.style.transformOrigin = '';
+  if (!turning) return;
+  turning.animation?.cancel();
+  if (turning.frame) cancelAnimationFrame(turning.frame);
+  clearTimeout(turning.timer);
+  turning.leaf?.remove();
+  for (const node of turning.extras || []) node.remove();
+  turning.page.classList.remove('page-arriving');
+  turning.page.style.transformOrigin = '';
+  turning.page.style.clipPath = '';
   el.viewerFlow.classList.remove('turning');
+  el.viewer.querySelector('.viewer-stage')?.classList.remove('is-turning');
   turning = null;
+}
+
+const stripIds = (node) => {
+  node.removeAttribute('id');
+  for (const child of node.querySelectorAll('[id]')) child.removeAttribute('id');
+  return node;
+};
+
+/** Where the page sits within the stage, for laying copies exactly over it. */
+function pageBox(page) {
+  const stage = el.viewer.querySelector('.viewer-stage');
+  const rect = page.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+  return {
+    stage,
+    left: rect.left - stageRect.left + stage.scrollLeft,
+    top: rect.top - stageRect.top + stage.scrollTop,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+/** A copy of the page as it looks now, laid exactly over it. */
+function snapshot(page, box) {
+  const leaf = stripIds(page.cloneNode(true));
+  leaf.classList.add('page-leaf');
+  leaf.setAttribute('aria-hidden', 'true');
+  Object.assign(leaf.style, {
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+  });
+  box.stage.appendChild(leaf);
+  return leaf;
 }
 
 async function turnPage(page, delta, change) {
   finishTurn();
-  if (reduceMotion.matches || page.hidden) return change();
+  if (turnStyle === 'none' || reduceMotion.matches || page.hidden) return change();
+  if (turnStyle === 'curl') {
+    const live = await beginCurl(page, delta, change);
+    if (live) live.play();
+    return;
+  }
 
-  const stage = el.viewer.querySelector('.viewer-stage');
-  const rect = page.getBoundingClientRect();
-  const stageRect = stage.getBoundingClientRect();
-
-  const leaf = page.cloneNode(true);
-  leaf.removeAttribute('id');
-  for (const node of leaf.querySelectorAll('[id]')) node.removeAttribute('id');
-  leaf.classList.add('page-leaf');
-  leaf.setAttribute('aria-hidden', 'true');
-  Object.assign(leaf.style, {
-    left: `${rect.left - stageRect.left + stage.scrollLeft}px`,
-    top: `${rect.top - stageRect.top + stage.scrollTop}px`,
-    width: `${rect.width}px`,
-    height: `${rect.height}px`,
-    transformOrigin: 'left center',
-  });
-  stage.appendChild(leaf);
+  const box = pageBox(page);
+  const leaf = snapshot(page, box);
+  leaf.style.transformOrigin = 'left center';
   const current = { leaf, page, animation: null };
   turning = current;
 
@@ -1096,6 +1148,208 @@ async function turnPage(page, delta, change) {
   setTimeout(done, 520);
 }
 
+// ---- the corner curl's geometry
+//
+// The page is W×H with its turning corner C at the top right, (W, 0). Wherever
+// that corner has been pulled to, P, the fold is the line halfway between C
+// and P, at right angles to CP. Everything on C's side of it has lifted and
+// lies reflected across the fold; everything else is still flat.
+
+/** The fold for a corner pulled to P: a point on it and the normal towards C. */
+function foldFor(W, P) {
+  const dx = W - P.x;
+  const dy = 0 - P.y;
+  const len = Math.hypot(dx, dy);
+  return { M: { x: (W + P.x) / 2, y: P.y / 2 }, n: len ? { x: dx / len, y: dy / len } : { x: 1, y: 0 }, len };
+}
+
+/** The part of the page on one side of the fold, as a CSS polygon (side 1: lifted). */
+function pageSide(W, H, M, n, side) {
+  const corners = [[0, 0], [W, 0], [W, H], [0, H]];
+  const dist = ([x, y]) => side * ((x - M.x) * n.x + (y - M.y) * n.y);
+  const out = [];
+  for (let i = 0; i < 4; i++) {
+    const a = corners[i];
+    const b = corners[(i + 1) % 4];
+    const da = dist(a);
+    const db = dist(b);
+    if (da >= 0) out.push(a);
+    if (da >= 0 !== db >= 0) {
+      const t = da / (da - db);
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  if (out.length < 3) return 'polygon(0 0, 0 0, 0 0)';
+  return `polygon(${out.map(([x, y]) => `${x.toFixed(2)}px ${y.toFixed(2)}px`).join(', ')})`;
+}
+
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+/** Where the corner is at a point in an automatic turn: it dips as it is pulled over. */
+const curlPath = (W, H, e) => ({ x: W - 2 * W * e, y: H * 0.3 * Math.sin(Math.PI * e) });
+
+/**
+ * Start a curl: copy the page as it is, make the change underneath, and lay
+ * out the layers. Resolves to controls for drawing it (play, follow, settle),
+ * or null if another turn took over meanwhile.
+ *
+ * Forward, the copy of the old page is what lifts away, over the new page.
+ * Back, the real page (now the previous one) is what comes down, over a copy
+ * of the old one.
+ */
+async function beginCurl(page, delta, change) {
+  finishTurn();
+  const box = pageBox(page);
+  const leaf = snapshot(page, box);
+  const current = { leaf, page, extras: [], frame: 0, timer: 0 };
+  turning = current;
+  box.stage.classList.add('is-turning');
+
+  el.viewerFlow.classList.add('turning');
+  try {
+    await change();
+  } finally {
+    el.viewerFlow.classList.remove('turning');
+  }
+  if (turning !== current) return null;
+
+  const W = box.width;
+  const H = box.height;
+  let front = leaf;
+  if (delta < 0) {
+    leaf.classList.add('page-leaf-under');
+    page.classList.add('page-arriving');
+    front = page;
+  }
+
+  // The lifted part: the back of the page, its print faint and mirrored, with
+  // light and shade across it from the fold.
+  const place = (node) =>
+    Object.assign(node.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${W}px`, height: `${H}px` });
+  const flap = document.createElement('div');
+  flap.className = 'page-flap';
+  flap.setAttribute('aria-hidden', 'true');
+  const face = document.createElement('div');
+  face.className = 'page-flap-face';
+  const print = stripIds(front.cloneNode(true));
+  print.classList.remove('page-leaf', 'page-leaf-under', 'page-arriving');
+  print.classList.add('page-flap-print');
+  Object.assign(print.style, { left: '0', top: '0', width: `${W}px`, height: `${H}px`, clipPath: '' });
+  const shine = document.createElement('div');
+  shine.className = 'page-curl-strip page-flap-shine';
+  face.append(print, shine);
+  flap.appendChild(face);
+  place(flap);
+
+  // The shadow the lifted page casts on the page being revealed.
+  const shade = document.createElement('div');
+  shade.className = 'page-curl-shade';
+  shade.setAttribute('aria-hidden', 'true');
+  const shadeStrip = document.createElement('div');
+  shadeStrip.className = 'page-curl-strip page-curl-shadow';
+  shade.appendChild(shadeStrip);
+  place(shade);
+
+  box.stage.append(shade, flap);
+  current.extras = [flap, shade];
+
+  const diag = Math.hypot(W, H);
+  for (const strip of [shine, shadeStrip]) Object.assign(strip.style, { width: `${diag * 1.5}px`, height: `${diag * 3}px` });
+
+  /** Draw with the corner at P; fade is the lifted page's opacity. */
+  function draw(P, fade = 1) {
+    const x = Math.max(-W, Math.min(W, P.x));
+    const y = Math.max(-H * 0.25, Math.min(H, P.y));
+    const { M, n, len } = foldFor(W, { x, y });
+    if (len < 0.5) {
+      front.style.clipPath = '';
+      flap.style.visibility = shade.style.visibility = 'hidden';
+      return;
+    }
+    flap.style.visibility = shade.style.visibility = '';
+    front.style.clipPath = pageSide(W, H, M, n, -1);
+    const lifted = pageSide(W, H, M, n, 1);
+    face.style.clipPath = lifted;
+    shade.style.clipPath = lifted;
+    // Reflect the lifted part across the fold.
+    const k = 2 * (M.x * n.x + M.y * n.y);
+    flap.style.transform = `matrix(${1 - 2 * n.x * n.x}, ${-2 * n.x * n.y}, ${-2 * n.x * n.y}, ${1 - 2 * n.y * n.y}, ${k * n.x}, ${k * n.y})`;
+    flap.style.opacity = String(fade);
+    // Both strips start on the fold and run towards the corner.
+    const angle = (Math.atan2(n.y, n.x) * 180) / Math.PI;
+    for (const strip of [shine, shadeStrip]) {
+      strip.style.left = `${M.x}px`;
+      strip.style.top = `${M.y - diag * 1.5}px`;
+      strip.style.transform = `rotate(${angle}deg)`;
+    }
+    // The shadow is deepest mid-turn, when the page stands highest.
+    shadeStrip.style.opacity = String(0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, len / (2 * W))));
+  }
+
+  /** Run P along a path over ms, then call done. Time-based, and safe in a background tab. */
+  function run(pointAt, ms, done) {
+    const start = performance.now();
+    let finished = false;
+    const end = () => {
+      if (finished) return;
+      finished = true;
+      cancelAnimationFrame(current.frame);
+      clearTimeout(current.timer);
+      if (turning === current) done();
+    };
+    const frame = (now) => {
+      if (turning !== current) return;
+      const t = Math.min(1, (now - start) / ms);
+      const { P, fade } = pointAt(t);
+      draw(P, fade);
+      if (t < 1) current.frame = requestAnimationFrame(frame);
+      else end();
+    };
+    current.frame = requestAnimationFrame(frame);
+    current.timer = setTimeout(end, ms + 250);
+  }
+
+  // The lifted page fades only at the very end, as it settles to the left.
+  const fadeAt = (e) => (e > 0.88 ? Math.max(0, (1 - e) / 0.12) : 1);
+  const startAt = delta > 0 ? 0 : 1;
+  draw(curlPath(W, H, easeInOut(startAt)), fadeAt(startAt));
+
+  let last = delta > 0 ? { x: W, y: 0 } : { x: -W, y: 0 };
+  return {
+    W,
+    H,
+    /** An automatic turn, all the way. */
+    play() {
+      run((t) => {
+        const e = easeInOut(delta > 0 ? t : 1 - t);
+        return { P: curlPath(W, H, e), fade: fadeAt(e) };
+      }, 700, finishTurn);
+    },
+    /** By hand: put the corner at P. */
+    follow(P) {
+      last = P;
+      draw(P, 1);
+    },
+    /** By hand, let go: finish the turn, or fall back and undo it. */
+    settle(complete, undo) {
+      const from = last;
+      // Forward completes with the corner at the far left; back completes flat.
+      const forwardEnd = delta > 0 ? complete : !complete;
+      const to = forwardEnd ? { x: -W, y: 0 } : { x: W, y: 0 };
+      const distance = Math.hypot(to.x - from.x, to.y - from.y) / (2 * W);
+      run((t) => {
+        const e = 1 - Math.pow(1 - t, 3);
+        const P = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+        const fade = forwardEnd ? (t > 0.8 ? (1 - t) / 0.2 : 1) : 1;
+        return { P, fade };
+      }, Math.max(160, 420 * distance), () => {
+        if (!complete) undo();
+        finishTurn();
+      });
+    },
+  };
+}
+
 /** Resolves once the page image has loaded (or failed), capped so a slow one never stalls a turn. */
 function imageSettled(img) {
   if (img.complete) return Promise.resolve();
@@ -1106,47 +1360,144 @@ function imageSettled(img) {
   });
 }
 
-/** One step forward or back, crossing chapter boundaries in paged mode. */
-function step(delta) {
+/** The page element being read: the image of a fixed-layout page, or the text frame. */
+function currentPage() {
+  if (viewing?.kind === 'images') return el.viewerImage;
+  if (viewing?.kind === 'text' && readerMode === 'page') return el.viewerText;
+  return null;
+}
+
+/**
+ * What one step forward or back does, crossing chapter boundaries in paged
+ * mode, as a function to call; null at either end of the book. Its opposite
+ * step exactly undoes it, which is how a turn dragged by hand falls back.
+ */
+function pageChange(delta) {
   if (viewing?.kind === 'images') {
     const target = viewingPage + delta;
-    if (target < 1 || target > viewing.pageCount) return;
-    turnPage(el.viewerImage, delta, () => {
+    if (target < 1 || target > viewing.pageCount) return null;
+    return () => {
       viewingPage = target;
       showPage();
       return imageSettled(el.viewerImage);
-    });
-    return;
+    };
   }
-  if (viewing?.kind !== 'text') return;
-
   // Scroll view has no pages to step through; Prev/Next are disabled there.
-  if (readerMode !== 'page') return;
+  if (viewing?.kind !== 'text' || readerMode !== 'page') return null;
 
   const next = chapterPage + delta;
   if (next >= 1 && next <= chapterPages) {
-    turnPage(el.viewerText, delta, () => {
+    return () => {
       chapterPage = next;
       applyPageOffset();
-    });
-    return;
+    };
   }
-
   // Off the end of the chapter: move to the neighbour, entering from the side
   // the reader is travelling.
   const total = viewing.chapters.length;
   if (delta > 0 && viewingPage < total) {
-    turnPage(el.viewerText, delta, () => {
+    return () => {
       viewingPage += 1;
       return showChapter('start');
-    });
-  } else if (delta < 0 && viewingPage > 1) {
-    turnPage(el.viewerText, delta, () => {
+    };
+  }
+  if (delta < 0 && viewingPage > 1) {
+    return () => {
       viewingPage -= 1;
       return showChapter('end');
+    };
+  }
+  return null;
+}
+
+/** One step forward or back. */
+function step(delta) {
+  const page = currentPage();
+  const change = pageChange(delta);
+  if (page && change) turnPage(page, delta, change);
+}
+
+// Turning by hand: press near the right edge of the page and drag left to
+// turn forward, or near the left edge and drag right to turn back. A tap in
+// those edges turns the page too. Only with the corner curl.
+(function pageDrag() {
+  const stage = el.viewer.querySelector('.viewer-stage');
+  const EDGE = 0.22;
+  let drag = null;
+
+  /** Which way a press at this point would turn, or 0. */
+  function edgeAt(event) {
+    const page = currentPage();
+    if (!page || page.hidden || turnStyle !== 'curl' || reduceMotion.matches) return null;
+    if (!page.contains(event.target) || event.target.closest('a, button, input, select, textarea')) return null;
+    const rect = page.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const delta = x > 1 - EDGE ? 1 : x < EDGE ? -1 : 0;
+    return delta ? { page, delta, rect } : null;
+  }
+
+  stage.addEventListener('pointermove', (event) => {
+    if (!drag) {
+      // A hint that the edges can be taken hold of.
+      const edge = event.pointerType === 'mouse' ? edgeAt(event) : null;
+      stage.style.cursor = edge ? 'grab' : '';
+      return;
+    }
+    if (event.pointerId !== drag.id) return;
+    drag.dx = event.clientX - drag.x;
+    drag.dy = event.clientY - drag.y;
+    if (!drag.live) {
+      // Not a drag until it has moved a little; a tap stays a tap.
+      if (Math.hypot(drag.dx, drag.dy) < 6) return;
+      const change = pageChange(drag.delta);
+      if (!change) {
+        drag = null;
+        return;
+      }
+      stage.setPointerCapture?.(event.pointerId);
+      stage.style.cursor = 'grabbing';
+      drag.live = beginCurl(drag.page, drag.delta, change);
+    }
+    drag.live.then((live) => live && drag && live.follow(cornerFor(drag, live)));
+  });
+
+  /** Where the corner is for the pointer's travel so far. */
+  function cornerFor(d, live) {
+    // Forward, the corner follows the pointer; back, it comes from off the
+    // left of the page, so it travels twice as far as the pointer.
+    return d.delta > 0
+      ? { x: live.W + d.dx, y: d.dy }
+      : { x: -live.W + 2 * d.dx, y: d.dy };
+  }
+
+  stage.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || drag) return;
+    const edge = edgeAt(event);
+    if (!edge) return;
+    drag = { ...edge, id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0, live: null };
+  });
+
+  function release(event, cancelled) {
+    if (!drag || event.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    stage.style.cursor = '';
+    if (!d.live) {
+      // A tap at the edge turns the page.
+      if (!cancelled) step(d.delta);
+      return;
+    }
+    d.live.then((live) => {
+      if (!live) return;
+      const corner = cornerFor(d, live);
+      // Past halfway, it goes over; short of it, it falls back.
+      const complete = !cancelled && (d.delta > 0 ? corner.x < live.W * 0.5 : corner.x > -live.W * 0.5);
+      live.settle(complete, () => pageChange(-d.delta)?.());
     });
   }
-}
+  stage.addEventListener('pointerup', (event) => release(event, false));
+  stage.addEventListener('pointercancel', (event) => release(event, true));
+})();
 
 function closeViewer() {
   finishTurn();
@@ -1173,6 +1524,18 @@ el.typeBigger.addEventListener('click', () =>
   setReaderType({ size: clamp(readerType.size + 1, SIZE_MIN, SIZE_MAX) })
 );
 el.typeReset.addEventListener('click', () => setReaderType({ ...TYPE_DEFAULTS }));
+
+// How pages turn: kept per browser, like the type settings.
+el.typeTurn.value = turnStyle;
+el.typeTurn.addEventListener('change', () => {
+  turnStyle = TURN_STYLES.includes(el.typeTurn.value) ? el.typeTurn.value : 'curl';
+  finishTurn();
+  try {
+    localStorage.setItem(TURN_KEY, turnStyle);
+  } catch {
+    /* applies for now even if it cannot be kept */
+  }
+});
 
 el.viewerMode.addEventListener('click', (event) => {
   const button = event.target.closest('button');

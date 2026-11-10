@@ -1123,6 +1123,44 @@ a { color: var(--accent); }
 .page-leaf.page-leaf-under { z-index: 0; }
 .page-arriving { position: relative; z-index: 1; }
 
+/* The corner curl (see beginCurl() in app.js). The lifted part of the page is
+   reflected across the fold; its face is the back of the paper, with the print
+   showing faintly through, and light and shade running out from the fold. */
+.viewer-stage.is-turning { overflow: hidden; }
+.page-flap {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  transform-origin: 0 0;
+  filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.25)) drop-shadow(0 3px 14px rgba(0, 0, 0, 0.2));
+  will-change: transform, opacity;
+}
+.page-flap-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--page-bg) 92%, var(--page-text));
+}
+.page-flap-print {
+  position: absolute !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  opacity: 0.13;
+  pointer-events: none;
+}
+.page-curl-strip { position: absolute; transform-origin: 0 50%; pointer-events: none; }
+.page-flap-shine {
+  background: linear-gradient(to right,
+    rgba(0, 0, 0, 0.22) 0, rgba(0, 0, 0, 0.05) 14px,
+    rgba(255, 255, 255, 0.24) 34px, rgba(255, 255, 255, 0) 120px,
+    rgba(0, 0, 0, 0.08) 60%);
+}
+/* The shadow the lifting page casts on the page coming into view. */
+.page-curl-shade { position: absolute; z-index: 3; overflow: hidden; pointer-events: none; }
+.page-curl-shadow {
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.4) 0, rgba(0, 0, 0, 0.15) 22px, rgba(0, 0, 0, 0) 85px);
+}
+
 /* Nothing may exceed the page, or it would spill into the next column. */
 .viewer-text.page-mode .viewer-flow img { max-height: 88%; object-fit: contain; }
 .viewer-text.page-mode .viewer-flow h1 { break-after: avoid-column; }
