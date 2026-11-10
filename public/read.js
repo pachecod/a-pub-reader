@@ -176,16 +176,45 @@
   // The web reading page links back here with ?epub=<id> to open the ePub view.
   let pendingEpub = new URLSearchParams(location.search).get('epub');
 
+  // The summaries last shown, so a reload redraws them at once rather than
+  // flashing the compact cards while new ones arrive.
+  let lastReading = { items: [] };
+
   async function load() {
     el.refresh.disabled = true;
     try {
+      // The list of items comes back at once; the summaries can take longer
+      // (a hosted server waking up may need to read some EPUBs). So draw
+      // straight away with the summaries already known, then again when the
+      // new ones arrive. Without summaries, the compact cards still work.
+      const reading = api('/api/reading').catch(() => null);
+      const { items } = await api('/api/outbox');
+      draw(items, lastReading);
+
+      if (pendingEpub) {
+        const wanted = items.find((i) => i.id === pendingEpub);
+        pendingEpub = null;
+        history.replaceState(null, '', location.pathname);
+        if (wanted) openEpub(wanted);
+      }
+
+      const fresh = await reading;
+      if (fresh) {
+        lastReading = fresh;
+        draw(items, fresh);
+      }
+    } catch (err) {
+      el.booksEmpty.hidden = false;
+      el.booksEmpty.querySelector('p').textContent = err.message;
+    } finally {
+      el.refresh.disabled = false;
+    }
+  }
+
+  /** Draw every section of the Library from the items and their summaries. */
+  function draw(items, reading) {
+    {
       // Newest first, so for a feed the first edition seen is the current one.
-      // The summaries are what the Read tab shows; each section draws its
-      // items that way. If they cannot be had, the compact cards still work.
-      const [{ items }, reading] = await Promise.all([
-        api('/api/outbox'),
-        api('/api/reading').catch(() => ({ items: [] })),
-      ]);
       const summaries = new Map(reading.items.map((s) => [s.id, s]));
       const draw = (entry) => readableRow(entry, summaries.get(entry.id));
 
@@ -243,18 +272,6 @@
       el.notes.replaceChildren(...notes.map(draw));
       el.feeds.replaceChildren(...feeds.map(draw));
       showNewCounts();
-
-      if (pendingEpub) {
-        const wanted = items.find((i) => i.id === pendingEpub);
-        pendingEpub = null;
-        history.replaceState(null, '', location.pathname);
-        if (wanted) openEpub(wanted);
-      }
-    } catch (err) {
-      el.booksEmpty.hidden = false;
-      el.booksEmpty.querySelector('p').textContent = err.message;
-    } finally {
-      el.refresh.disabled = false;
     }
   }
 

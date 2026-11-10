@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { composeFeedHtml, decodeEntities, demoteHeadings, parseFeed, siteLabel, siteOf } from '../lib/rss.mjs';
+import { composeFeedHtml, decodeEntities, demoteHeadings, hydrateItems, parseFeed, siteLabel, siteOf } from '../lib/rss.mjs';
 import { FeedStore, feedFilename, normalizeUrl, FEED_FOLDER } from '../lib/feeds.mjs';
 import { extractArticle } from '../lib/extract.mjs';
 import { DIRECTORY, discoverFeeds } from '../lib/discover.mjs';
@@ -167,6 +167,30 @@ const h2Count = (composed.match(/<h2>/g) || []).length;
 assert(h2Count === 3, `one h2 per item (${h2Count})`);
 assert(/summary only/.test(composed), 'items that were not hydrated say so');
 assert(/https:\/\/example.edu\/news\/newest/.test(composed), 'source link included');
+
+console.log('\n== fetching full text, a few at a time ==');
+{
+  // Cached articles answer after uneven delays; the results must keep feed order.
+  const items = Array.from({ length: 9 }, (_, i) => ({ title: `Story ${i + 1}`, link: `https://example.com/${i + 1}`, html: '<p>teaser</p>' }));
+  let inFlight = 0;
+  let most = 0;
+  const articleCache = {
+    get: async (link) => {
+      inFlight++;
+      most = Math.max(most, inFlight);
+      await new Promise((r) => setTimeout(r, 40 - Number(link.split('/').pop()) * 4));
+      inFlight--;
+      return { hydrated: true, html: `<p>full ${link}</p>`, author: '' };
+    },
+    set: async () => {},
+  };
+  const progress = [];
+  const out = await hydrateItems(items, { limit: 9, articleCache, extractArticle: async () => null, onProgress: (n) => progress.push(n) });
+  assert(out.map((i) => i.title).join() === items.map((i) => i.title).join(), 'articles come back in feed order');
+  assert(out.every((i, n) => i.hydrated && i.html === `<p>full https://example.com/${n + 1}</p>`), 'each with its own text');
+  assert(most > 1 && most <= 4, `several are fetched at once, at most four (${most})`);
+  assert(progress.length === 9 && progress[8] === 9, 'progress counts every article');
+}
 
 console.log('\n== links back to the website ==');
 assert(siteOf({ link: 'https://www.bbc.co.uk/news/world', items: [] }) === 'https://www.bbc.co.uk/news/world', "the channel's own link is the website");

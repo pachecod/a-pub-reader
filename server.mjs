@@ -34,7 +34,7 @@ import { hashPassword, passwordProblem, readablePassword, verifyPassword } from 
 import { lookupKey, openPassword, sealPassword } from './lib/accounts/lookup.mjs';
 import { mediaTypeFor, readChapter, readEpub, readEpubFile } from './lib/epubread.mjs';
 import { renderWebPage } from './lib/webread.mjs';
-import { pruneSummaries, summarize } from './lib/summary.mjs';
+import { SUMMARY_VERSION, pruneSummaries, savedSummary, summarize } from './lib/summary.mjs';
 import { discoverFeeds } from './lib/discover.mjs';
 import { explainHttpFailure } from './lib/httperror.mjs';
 import { blockedReason, configureNetGuard, safeFetch } from './lib/netguard.mjs';
@@ -836,6 +836,15 @@ async function refreshFeed(feed) {
     onReader,
   });
 
+  // Summarize it now, while its bytes are in hand, so the Library shows it
+  // without reading the EPUB back (slow on a small hosted server).
+  try {
+    const added = await outbox.get(id);
+    if (added) await outbox.update(id, { summary: savedSummary(await summarize(added, async () => built.buffer)) });
+  } catch {
+    /* the Library works it out on first view instead */
+  }
+
   steps.push(`Built ${filename} (${built.chapters} chapter(s), ${Math.round(built.buffer.length / 1024)} KB)`);
   steps.push('Queued for the reader');
 
@@ -1112,7 +1121,10 @@ const routes = {
     const summaries = [];
     for (const item of current) {
       try {
-        summaries.push(withSite(await summarize(item, () => outbox.readEpub(item)), item));
+        const summary = await summarize(item, () => outbox.readEpub(item));
+        // Worked out now: save it with the item, so next time is instant.
+        if (item.summary?.v !== SUMMARY_VERSION) await outbox.update(item.id, { summary: savedSummary(summary) }).catch(() => {});
+        summaries.push(withSite(summary, item));
       } catch {
         // An unreadable file still shows up, just without a summary.
         summaries.push({ id: item.id, kind: item.source?.kind || 'file', title: item.title, builtAt: item.builtAt, articles: [], excerpt: '' });
@@ -1127,7 +1139,9 @@ const routes = {
     // where they went, which is more useful than silently emptying the list,
     // and "Clear" is what removes them.
     const includeDelivered = url.searchParams.get('pending') !== '1';
-    return json(200, { items: await outbox.list({ includeDelivered }) });
+    // Saved summaries are for /api/reading; the queue does not need them.
+    const items = (await outbox.list({ includeDelivered })).map(({ summary, ...item }) => item);
+    return json(200, { items });
   },
 
   /**

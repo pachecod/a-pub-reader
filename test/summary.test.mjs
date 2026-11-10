@@ -2,7 +2,7 @@
 // HTML feeds produce, skipping the captions, standfirsts and bios that often
 // come first.
 
-import { excerpt, summarizeArticle } from '../lib/summary.mjs';
+import { SUMMARY_VERSION, excerpt, savedSummary, summarize, summarizeArticle } from '../lib/summary.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -38,6 +38,19 @@ assert(repeated.excerpt.startsWith('CHUNCHEON'), 'a headline repeated as the fir
 const long = excerpt('word '.repeat(100), 50);
 assert(long.length <= 51 && long.endsWith('…'), `long openings are cut at a word with an ellipsis: ${long.length} chars`);
 assert(excerpt('Short and complete.') === 'Short and complete.', 'short ones are left whole');
+
+console.log('\n== saved summaries ==');
+{
+  const computed = { id: 'a', kind: 'feed', feedId: 'f', title: 'Old title', builtAt: '2026-11-10', chapters: 2, articles: [{ n: 1, title: 'One', byline: '', excerpt: 'Opening.' }], excerpt: '', firstLink: 'https://example.com/1' };
+  const saved = savedSummary(computed);
+  assert(saved.v === SUMMARY_VERSION && !('id' in saved.data) && !('title' in saved.data) && saved.data.articles.length === 1, 'a saved summary leaves out what the item already has');
+  const entry = { id: 'saved-1', title: 'New title', builtAt: '2026-11-10', chapters: 2, source: { kind: 'feed', feedId: 'f' }, summary: saved };
+  const restored = await summarize(entry, async () => { throw new Error('the EPUB should not be read'); });
+  assert(restored.articles[0].title === 'One' && restored.title === 'New title' && restored.id === 'saved-1', "a saved summary is used without reading the EPUB, with the item's current title");
+  const stale = { ...entry, id: 'saved-2', summary: { v: SUMMARY_VERSION + 1, data: saved.data } };
+  const read = await summarize(stale, async () => { throw new Error('read'); }).then(() => 'no', (err) => err.message);
+  assert(read === 'read', 'a summary saved in another shape is worked out again');
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

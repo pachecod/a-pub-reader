@@ -93,7 +93,12 @@
   /** Called by app.js with how many changes the next Sync Reader will make. */
   function setPending(count) {
     badge.hidden = count === 0;
-    badge.textContent = `${count} to sync`;
+    // On a phone only the number shows; the words stay for screen readers.
+    const words = document.createElement('span');
+    words.className = 'badge-words';
+    words.textContent = ' to sync';
+    badge.replaceChildren(String(count), words);
+    badge.setAttribute('aria-label', `${count} to sync`);
     badge.title =
       count === 1
         ? '1 change waiting for Sync Reader — click to open the Library'

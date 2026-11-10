@@ -284,6 +284,9 @@ try {
   assert(themeIds.every((id) => themeCss.includes(`:root[data-theme="${id}"] {`)), 'every theme in the picker has its colors');
 
   const reading = await api('/api/reading');
+  const savedEntry = JSON.parse(await fs.readFile(path.join(sandbox, 'out', 'outbox.json'), 'utf8')).items.find((i) => i.id === ok.id);
+  assert(savedEntry?.summary?.v >= 1 && savedEntry.summary.data.excerpt, 'a summary, once worked out, is saved with its item (so a restart need not redo it)');
+  assert(!(await api('/api/outbox')).body.items.some((i) => i.summary), 'the queue list leaves saved summaries out');
   const summarized = reading.body.items?.find((i) => i.id === ok.id);
   assert(summarized && summarized.excerpt.length > 40, `the Library gets a summary with an opening: "${summarized?.excerpt.slice(0, 40)}…"`);
   assert(summarized?.author === 'Sam Ito', `and the book's author: ${summarized?.author}`);

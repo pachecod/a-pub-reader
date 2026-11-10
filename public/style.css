@@ -135,7 +135,9 @@ body {
 .theme-panel-head { margin: 0.1rem 0.4rem 0.5rem; color: var(--muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 @media (max-width: 640px) {
   .theme-panel { position: fixed; top: 60px; right: 0.5rem; }
-  /* Narrow screens: the palette alone. */
+}
+/* Narrower windows: the palette alone, leaving room for the sync badge and the name menu. */
+@media (max-width: 800px) {
   .theme-toggle { width: 34px; padding: 0; }
   .theme-toggle-word { display: none; }
 }
@@ -1552,4 +1554,10 @@ h2, .column-title { color: var(--text); }
 .user-menu-item:hover, .user-menu-item:focus-visible { background: var(--panel-2); color: var(--accent); outline: none; }
 @media (max-width: 640px) {
   .user-toggle { max-width: 6.5rem; padding: 0 0.5rem; }
+}
+
+/* A phone: the sync badge shows just its number (its title and label say the rest). */
+@media (max-width: 420px) {
+  .menubar .pending-badge .badge-words { display: none; }
+  .menubar .pending-badge { min-width: 1.9rem; text-align: center; }
 }
