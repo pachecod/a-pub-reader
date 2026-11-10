@@ -2226,7 +2226,7 @@ async function opdsRequest(req, res, url, ip) {
       res.writeHead(200, {
         'content-type': MIME['.epub'],
         'content-length': data.length,
-        'content-disposition': `attachment; filename="${String(item.filename || 'book.epub').replace(/["\\]/g, '')}"`,
+        'content-disposition': attachment(item.filename || 'book.epub'),
         'cache-control': 'private, no-store',
       });
       return res.end(data);
@@ -2439,7 +2439,7 @@ async function routeRequest(req, res, url, key, ip) {
     const data = await outbox.readEpub(job);
     res.writeHead(200, {
       'content-type': MIME['.epub'],
-      'content-disposition': `attachment; filename="${job.filename.replace(/"/g, '')}"`,
+      'content-disposition': attachment(job.filename),
       'content-length': data.length,
     });
     return res.end(data);
@@ -2485,7 +2485,7 @@ async function sendLibraryZip(res) {
   const stamp = new Date().toISOString().slice(0, 10);
   res.writeHead(200, {
     'content-type': 'application/zip',
-    'content-disposition': `attachment; filename="A-Pub Reader eBooks ${stamp}.zip"`,
+    'content-disposition': attachment(`A-Pub Reader eBooks ${stamp}.zip`),
     'cache-control': 'no-store',
   });
   zip
@@ -2513,6 +2513,29 @@ async function serveStatic(res, pathname) {
 
 function json(status, payload) {
   return { status, type: 'application/json', payload: JSON.stringify(payload) };
+}
+
+/**
+ * A Content-Disposition for downloading a file under its own name. HTTP
+ * headers carry only plain ASCII, so a name like "Al Jazeera – News" or one
+ * with curly quotes would make Node refuse the header: send a plain-ASCII
+ * fallback in filename= and the exact name, UTF-8 encoded, in filename*=
+ * (RFC 6266 / 5987), which every current browser and reader prefers.
+ */
+function attachment(name) {
+  const exact = String(name || 'download').replace(/[\r\n"\\]/g, '').trim() || 'download';
+  const ascii =
+    exact
+      .replace(/[\u2010-\u2015\u2212]/g, '-')
+      .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u2033]/g, '')
+      .replace(/\u2026/g, '...')
+      .normalize('NFKD')
+      .replace(/[^\x20-\x7e]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'download';
+  const encoded = encodeURIComponent(exact).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 function send(res, status, type, payload) {

@@ -238,6 +238,19 @@ try {
   );
 
   console.log('\n== download all eBooks ==');
+  // A name outside plain ASCII (accents, a dash, curly quotes) must not break the download header.
+  const fancyTitle = 'Café Notes – “Quoted” Edition';
+  const fancy = await api('/api/convert', {
+    method: 'POST',
+    body: JSON.stringify({ items: [{ name: 'fancy.html', text: `<html><head><title>${fancyTitle}</title></head><body><article><h1>${fancyTitle}</h1><p>${'A sentence long enough for Readability to keep. '.repeat(12)}</p></article></body></html>` }] }),
+  });
+  const fancyItem = fancy.body.results.find((r) => r.ok);
+  const fancyDownload = await fetch(`http://127.0.0.1:${APP_PORT}/out/${fancyItem.id}`);
+  const disposition = fancyDownload.headers.get('content-disposition') || '';
+  assert(fancyDownload.ok && /^attachment; filename="[\x20-\x7e]+"; filename\*=UTF-8''/.test(disposition), `a file name with accents, dashes or curly quotes downloads (${disposition.slice(0, 60)}…)`);
+  assert(decodeURIComponent(disposition.split("UTF-8''")[1]) === fancyItem.filename, 'and keeps its exact name for browsers that read it');
+  await api('/api/outbox/remove', { method: 'POST', body: JSON.stringify({ id: fancyItem.id, fromDevice: false }) });
+
   const all = await fetch(`http://127.0.0.1:${APP_PORT}/download/ebooks.zip`);
   assert(all.ok && all.headers.get('content-type') === 'application/zip', 'the library downloads as one zip');
   assert(/attachment; filename="A-Pub Reader eBooks \d{4}-\d{2}-\d{2}\.zip"/.test(all.headers.get('content-disposition') || ''), 'named for the app and the day');
