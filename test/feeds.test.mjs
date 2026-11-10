@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { composeFeedHtml, decodeEntities, demoteHeadings, parseFeed } from '../lib/rss.mjs';
+import { composeFeedHtml, decodeEntities, demoteHeadings, parseFeed, siteLabel, siteOf } from '../lib/rss.mjs';
 import { FeedStore, feedFilename, normalizeUrl, FEED_FOLDER } from '../lib/feeds.mjs';
 import { extractArticle } from '../lib/extract.mjs';
 import { DIRECTORY, discoverFeeds } from '../lib/discover.mjs';
@@ -167,6 +167,21 @@ const h2Count = (composed.match(/<h2>/g) || []).length;
 assert(h2Count === 3, `one h2 per item (${h2Count})`);
 assert(/summary only/.test(composed), 'items that were not hydrated say so');
 assert(/https:\/\/example.edu\/news\/newest/.test(composed), 'source link included');
+
+console.log('\n== links back to the website ==');
+assert(siteOf({ link: 'https://www.bbc.co.uk/news/world', items: [] }) === 'https://www.bbc.co.uk/news/world', "the channel's own link is the website");
+assert(siteOf({ link: '', items: [{ link: 'https://www.cjr.org/story.php' }] }) === 'https://www.cjr.org/', 'without one, the first story names the site');
+assert(siteOf({ link: 'javascript:alert(1)', items: [], url: 'https://feeds.example.com/rss' }) === 'https://feeds.example.com/', 'a non-web link is never used');
+assert(siteLabel('https://www.pbs.org/newshour/') === 'pbs.org' && siteLabel('nope') === '', 'a site is labelled by its host name');
+const linked = composeFeedHtml({ title: 'Example News', link: 'https://example.edu/' }, rss.items);
+const sources = linked.match(/<p class="cp-source">.*?<\/p>/g) || [];
+assert(sources.length === rss.items.length * 2, `every article has a source line above and below it (${sources.length})`);
+assert(/From <a href="https:\/\/example.edu\/">Example News<\/a> · <a href="https:\/\/example.edu\/news\/newest">Read on example.edu<\/a>/.test(linked), 'the top line names the site and links the story');
+assert(/Read the original on example.edu<\/a> · <a href="https:\/\/example.edu\/">More from Example News<\/a>/.test(linked), 'the bottom line links the story and the site');
+const kept = await extractArticle({ html: `<!DOCTYPE html><body>${linked}</body>`, fragment: true, includeImages: false });
+assert(kept.chapters[0].body.includes('class="cp-source"'), 'the source line survives into the EPUB with its class');
+const sneaky = await extractArticle({ html: '<!DOCTYPE html><body><p class="evil">x</p><p class="cp-a b">y</p></body>', fragment: true, includeImages: false });
+assert(!/class=/.test(sneaky.chapters.map((c) => c.body).join('')), "any class that is not the app's own marker is dropped");
 
 const article = await extractArticle({
   html: `<!DOCTYPE html><body>${composed}</body>`,

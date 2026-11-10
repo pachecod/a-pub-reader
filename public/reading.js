@@ -45,8 +45,19 @@
   function feedBlock(item) {
     const block = node('article', 'reading-feed');
     const head = node('header', 'reading-feed-head');
+    // The feed's name, and beside it a link to its website: reading from the
+    // feed should still send people to the publisher.
+    const name = node('span', 'reading-feed-title');
+    name.appendChild(link(readUrl(item.id), 'reading-feed-name', item.title));
+    if (item.site && /^https?:\/\//i.test(item.site)) {
+      const site = link(item.site, 'reading-feed-site', item.siteLabel || 'Website');
+      site.target = '_blank';
+      site.rel = 'noopener';
+      site.title = `Visit ${item.siteLabel || 'the website'}`;
+      name.appendChild(site);
+    }
     head.append(
-      link(readUrl(item.id), 'reading-feed-name', item.title),
+      name,
       node('span', 'reading-feed-meta', `${plural(item.articles.length, 'article')} · ${when(item.builtAt)}`)
     );
     block.appendChild(head);

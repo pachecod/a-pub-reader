@@ -44,7 +44,7 @@ import {
   sameOrigin,
   secretProblems,
 } from './lib/security.mjs';
-import { composeFeedHtml, fetchFeed, hydrateItems } from './lib/rss.mjs';
+import { composeFeedHtml, fetchFeed, hydrateItems, siteLabel, siteOf } from './lib/rss.mjs';
 import { CATALOGUES, bookFilename, downloadBook, fetchCatalogue } from './lib/books.mjs';
 import {
   copyToVolume,
@@ -687,6 +687,8 @@ async function refreshFeed(feed) {
   const steps = [];
   const fetched = await fetchFeedShared(feed.url);
   const title = feed.title?.trim() || fetched.title;
+  // The feed's own website, linked from every article and from the Library.
+  const site = siteOf(fetched);
 
   if (!fetched.items.length) throw new Error('That feed currently has no items.');
   steps.push(`Fetched ${fetched.items.length} item(s)`);
@@ -707,7 +709,7 @@ async function refreshFeed(feed) {
   // One pass over the whole feed: the chapter splitter breaks on the per-item
   // <h2>, so each article becomes a chapter with a working table of contents.
   const article = await extractArticle({
-    html: `<!DOCTYPE html><body>${composeFeedHtml(fetched, items)}</body>`,
+    html: `<!DOCTYPE html><body>${composeFeedHtml({ title, link: site }, items)}</body>`,
     fragment: true,
     includeImages: false,
     normalizeImage: normalizeForDevice,
@@ -746,7 +748,7 @@ async function refreshFeed(feed) {
     // Carried so a send that happens hours later still knows which edition to
     // remove and which feed to update.
     replaces: feed.lastFilename || null,
-    source: { kind: 'feed', label: title, feedId: feed.id, items: items.length },
+    source: { kind: 'feed', label: title, feedId: feed.id, items: items.length, site },
     onReader,
   });
 
@@ -755,6 +757,7 @@ async function refreshFeed(feed) {
 
   await feeds.update(feed.id, {
     title,
+    site,
     lastRefreshedAt: new Date().toISOString(),
     lastItemCount: items.length,
     lastError: null,
@@ -821,10 +824,20 @@ const routes = {
       seenFeeds.add(feedId);
       return true;
     });
+    // Each feed's website, for the link beside its name: saved on the feed or
+    // its edition, or, for an edition built before sites were kept, the site
+    // of the first story it links to.
+    const followed = new Map((await feeds.list()).map((f) => [f.id, f]));
+    const withSite = (summary, item) => {
+      if (summary.kind !== 'feed') return summary;
+      const site = [item.source?.site, followed.get(item.source?.feedId)?.site, siteOf({ items: [{ link: summary.firstLink }] })]
+        .find((s) => siteLabel(s));
+      return site ? { ...summary, site, siteLabel: siteLabel(site) } : summary;
+    };
     const summaries = [];
     for (const item of current) {
       try {
-        summaries.push(await summarize(item, () => outbox.readEpub(item)));
+        summaries.push(withSite(await summarize(item, () => outbox.readEpub(item)), item));
       } catch {
         // An unreadable file still shows up, just without a summary.
         summaries.push({ id: item.id, kind: item.source?.kind || 'file', title: item.title, builtAt: item.builtAt, articles: [], excerpt: '' });
@@ -1118,6 +1131,7 @@ const routes = {
           const fetched = await fetchFeedShared(feed.url);
           const updated = await feeds.update(feed.id, {
             title: feed.title || fetched.title,
+            site: siteOf(fetched),
             lastItemCount: fetched.items.length,
             lastError: null,
           });

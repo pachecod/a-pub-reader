@@ -672,6 +672,11 @@ a { color: var(--accent); }
 .reading-feed-name { color: var(--text); font-weight: 700; font-size: 0.95rem; text-decoration: none; }
 .reading-feed-name:hover { color: var(--accent); text-decoration: underline; }
 .reading-feed-meta { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+.reading-feed-title { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0.15rem 0.55rem; min-width: 0; }
+/* The publisher's website, beside the feed's name. */
+.reading-feed-site { color: var(--accent); font-size: 0.78rem; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.reading-feed-site::after { content: ' ↗'; }
+.reading-feed-site:hover { text-decoration: underline; }
 .reading-articles { list-style: none; margin: 0; padding: 0; }
 .reading-article { padding: 0.7rem 0; border-bottom: 1px solid var(--line); }
 .reading-article:last-child { border-bottom: 0; }
