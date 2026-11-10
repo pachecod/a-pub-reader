@@ -262,6 +262,11 @@ try {
   );
   assert(/role="switch"/.test(webHtml) && /id="reader-state"/.test(webHtml), 'the reading page has the On reader switch and its note');
   assert(/Return to Library/.test(webHtml) && /aria-current="page">Library</.test(webHtml), 'a reading page leads back to the Library');
+  assert(
+    /id="type-toggle"/.test(webHtml) && /id="type-family"/.test(webHtml) && /id="type-smaller"/.test(webHtml) && /id="type-bigger"/.test(webHtml),
+    'a reading page has font and size controls'
+  );
+  assert(/<script src="\/web-read\.js"><\/script>/.test(webHtml), 'its script runs before the text is drawn, so the saved type applies at once');
 
   const reading = await api('/api/reading');
   const summarized = reading.body.items?.find((i) => i.id === ok.id);
