@@ -218,7 +218,12 @@ try {
   const readerKey = keyMade.data.key;
   assert(/^[a-z2-9]{4}(-[a-z2-9]{4}){4}$/.test(readerKey) && /\/opds$/.test(keyMade.data.catalog), `a reader key is made, easy to type on a reader (${readerKey})`);
   assert(!/[01ilo]/.test(readerKey.replace(/-/g, '')), 'with no characters that look alike');
+  await opds('/opds', basic('reader1', 'wrong-key-wrong-key-wrong'));
+  const afterWrong = (await reader.call('/api/auth/me')).data.user.readerKey;
+  assert(afterWrong.failedAt && /Wrong reader key/.test(afterWrong.lastFailure) && !afterWrong.usedAt, 'Your account shows a failed try with a wrong key, and that the reader has not checked in');
   const root = await opds('/opds', basic('reader1', readerKey));
+  const afterOpen = (await reader.call('/api/auth/me')).data.user.readerKey;
+  assert(afterOpen.usedAt && afterOpen.lastActivity === 'Opened the catalog', 'then that the reader opened the catalog');
   assert(root.status === 200 && /profile=opds-catalog;kind=navigation/.test(root.type), 'with it the reader opens the catalog');
   assert(/<link rel="subsection" href="http:\/\/127\.0\.0\.1:\d+\/opds\/new"/.test(root.text) && /Documents \(1\)/.test(root.text), 'whose sections link on, with counts');
   const typedLoosely = await opds('/opds', basic('READER1', readerKey.toUpperCase().replace(/-/g, ' ')));
@@ -234,6 +239,7 @@ try {
   const got = await fetch(href, { headers: basic('reader1', readerKey) });
   const bytes = Buffer.from(await got.arrayBuffer());
   assert(got.status === 200 && got.headers.get('content-type') === 'application/epub+zip' && bytes.subarray(0, 2).toString() === 'PK', 'and the reader downloads it');
+  assert((await reader.call('/api/auth/me')).data.user.readerKey.lastActivity === 'Downloaded “Reader Reading”', 'Your account names what it downloaded');
   assert((await opds(`/opds/epub/${bossItem.id}`, basic('reader1', readerKey))).status === 404, "someone else's item cannot be downloaded");
   const account = await reader.call('/api/auth/me');
   assert(account.data.user.readerKey?.usedAt && account.data.user.readerKey.createdAt, 'Your account shows when the key was made and last used');

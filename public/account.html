@@ -66,6 +66,10 @@
       <dt>Password</dt><dd id="reader-password">A reader key (below), not your account password.</dd>
     </dl>
     <p id="reader-state" class="muted"></p>
+    <ul id="reader-activity" class="reader-activity" aria-live="polite" hidden>
+      <li><span class="reader-dot" id="reader-dot" aria-hidden="true"></span><strong>Last checked:</strong> <span id="reader-last"></span></li>
+      <li id="reader-failed-row" hidden><span class="reader-dot is-bad" aria-hidden="true"></span><strong>Last failed try:</strong> <span id="reader-failed"></span></li>
+    </ul>
     <p id="reader-key-box" class="admin-password" hidden><code id="reader-key"></code></p>
     <p id="reader-key-note" class="muted" hidden>Type this on the reader as the password. It is shown only now; if you lose it, make a new one.</p>
     <div class="account-actions">

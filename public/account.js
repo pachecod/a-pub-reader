@@ -36,14 +36,46 @@
       sessions > 1 ? `You are signed in on ${sessions} browsers or devices.` : 'You are signed in on this browser only.';
   }
 
+  const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+  /** "just now", "3 minutes ago", or the date. */
+  function ago(iso) {
+    const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (seconds < 45) return 'just now';
+    if (seconds < 3600) return `${Math.round(seconds / 60)} minute${Math.round(seconds / 60) === 1 ? '' : 's'} ago`;
+    if (seconds < 86400) return `${Math.round(seconds / 3600)} hour${Math.round(seconds / 3600) === 1 ? '' : 's'} ago`;
+    return when(iso);
+  }
+
   function showReaderKey(readerKey) {
-    const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
     $('reader-state').textContent = readerKey
-      ? `Reader access is on (key made ${when(readerKey.createdAt)}${readerKey.usedAt ? `, last used ${when(readerKey.usedAt)}` : ', not used yet'}).`
+      ? `Reader access is on (key made ${when(readerKey.createdAt)}).`
       : 'Reader access is off: no reader key yet.';
     $('reader-make').textContent = readerKey ? 'Make a new key (the old one stops working)' : 'Make a reader key';
     $('reader-remove').hidden = !readerKey;
+    $('reader-activity').hidden = !readerKey;
+    if (!readerKey) return;
+    // Has the reader checked in? What it last did, and its last failed try.
+    $('reader-last').textContent = readerKey.usedAt
+      ? `${ago(readerKey.usedAt)}: ${readerKey.lastActivity || 'signed in'}`
+      : 'not yet. Open the catalog on the reader; this updates by itself.';
+    $('reader-dot').classList.toggle('is-ok', Boolean(readerKey.usedAt));
+    const failedSince = readerKey.failedAt && (!readerKey.usedAt || readerKey.failedAt > readerKey.usedAt);
+    $('reader-failed-row').hidden = !failedSince;
+    if (failedSince) $('reader-failed').textContent = `${ago(readerKey.failedAt)}: ${readerKey.lastFailure}`;
   }
+
+  // While this page is open (and showing), check every few seconds whether the
+  // reader has been in touch, so setting it up can be watched as it happens.
+  setInterval(async () => {
+    if (document.hidden || $('reader-activity').hidden) return;
+    try {
+      const { user } = await api('/api/auth/me');
+      if (user) showReaderKey(user.readerKey);
+    } catch {
+      /* try again next time */
+    }
+  }, 5000);
 
   $('reader-make').addEventListener('click', async () => {
     try {

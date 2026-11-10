@@ -2145,6 +2145,8 @@ async function opdsRequest(req, res, url, ip) {
   if (!user) {
     loginFailures.hit(`opds-ip:${ip}`);
     if (who) loginFailures.hit(`opds:${who}`);
+    // Shown on Your account, to help set a reader up.
+    await accounts.noteReaderFailure(who, given.key ? 'Wrong reader key (an account password does not work here)' : 'No reader key was sent');
     return askForReaderKey(res, 'That username or reader key is not right.');
   }
 
@@ -2160,6 +2162,7 @@ async function opdsRequest(req, res, url, ip) {
         return { id: `urn:apub:${user.id}:${section.key}`, title: `${section.title} (${count})`, content: section.content, href: `${base}/opds/${section.key}` };
       });
       const payload = navigationFeed({ id: `urn:apub:${user.id}`, title: `${user.username}'s A-Pub library`, updated: newest, selfHref: `${base}/opds`, sections });
+      await accounts.noteReaderActivity(user.id, 'Opened the catalog');
       res.writeHead(200, { 'content-type': `${OPDS_NAVIGATION};charset=utf-8`, 'cache-control': 'private, no-store' });
       return res.end(payload);
     }
@@ -2169,6 +2172,7 @@ async function opdsRequest(req, res, url, ip) {
       const chosen = items.filter(section.test).slice(0, 200);
       const entries = [];
       for (const item of chosen) entries.push(await opdsEntry(item, base));
+      await accounts.noteReaderActivity(user.id, `Listed ${section.title} (${chosen.length})`);
       const payload = acquisitionFeed({
         id: `urn:apub:${user.id}:${section.key}`,
         title: section.title,
@@ -2186,6 +2190,7 @@ async function opdsRequest(req, res, url, ip) {
       const item = await outbox.get(download[1]);
       if (!item) return send(res, 404, 'text/plain', 'That item is no longer in your library.');
       const data = await outbox.readEpub(item);
+      await accounts.noteReaderActivity(user.id, `Downloaded “${item.title}”`);
       res.writeHead(200, {
         'content-type': MIME['.epub'],
         'content-length': data.length,
