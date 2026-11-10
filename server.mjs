@@ -24,7 +24,7 @@ import { PANEL, htmlToBlocks, renderBlocksToPages } from './lib/render.mjs';
 import { normalizeForDevice } from './lib/assets.mjs';
 import { feedFilename, normalizeUrl } from './lib/feeds.mjs';
 import { checkLimits, resolveLimits } from './lib/limits.mjs';
-import { ARTICLE_TTL_MS, FEED_TTL_MS, MemoryFetchCache, PgFetchCache, sharedFetcher } from './lib/store/fetchcache.mjs';
+import { FEED_TTL_MS, MemoryFetchCache, PgFetchCache, sharedFetcher } from './lib/store/fetchcache.mjs';
 import { BOOKS_FOLDER, DOCS_FOLDER, FEED_FOLDER, NOTES_FOLDER, moveDocumentsToTheirFolder } from './lib/folders.mjs';
 import { DiskBlobs, S3Blobs } from './lib/store/blobs.mjs';
 import { LOCAL_OWNER, SHARED_OWNER, databaseBackend, fileBackend } from './lib/store/backend.mjs';
@@ -40,7 +40,6 @@ import { discoverFeeds } from './lib/discover.mjs';
 import { explainHttpFailure } from './lib/httperror.mjs';
 import { blockedReason, configureNetGuard, safeFetch } from './lib/netguard.mjs';
 import { configureUserAgent, userAgent } from './lib/useragent.mjs';
-import { robotsAllow } from './lib/robots.mjs';
 import {
   RateLimiter,
   appCsp,
@@ -50,7 +49,7 @@ import {
   sameOrigin,
   secretProblems,
 } from './lib/security.mjs';
-import { composeFeedHtml, fetchFeed, hydrateItems, siteLabel, siteOf, withDates } from './lib/rss.mjs';
+import { composeFeedHtml, fetchFeed, siteLabel, siteOf, withDates } from './lib/rss.mjs';
 import { CATALOGUES, bookFilename, downloadBook, fetchCatalogue } from './lib/books.mjs';
 import {
   copyToVolume,
@@ -324,12 +323,11 @@ async function fetchFeedShared(url) {
   return withDates(FEED_REUSE_MS ? await shared(`feed:${key}`, FEED_REUSE_MS, load) : await load());
 }
 
-// A fetched article's text is kept for a few hours, for that library only: a
-// publisher's article is not copied from one person's library into another's.
-const articleCache = {
-  get: (link) => fetchCache.get(`article:${ownerContext.getStore() || DEFAULT_OWNER}:${link}`, ARTICLE_TTL_MS),
-  set: (link, value) => fetchCache.set(`article:${ownerContext.getStore() || DEFAULT_OWNER}:${link}`, value),
-};
+// Article text is never taken from publishers' pages (see lib/rss.mjs), so
+// nothing of the kind is kept. Anything an earlier version cached is removed.
+if (backend.kind === 'database') {
+  backend.db.query("DELETE FROM fetch_cache WHERE key LIKE 'article:%'").catch(() => {});
+}
 
 // ---- publishers who opted out
 //
@@ -365,8 +363,6 @@ async function optedOut(url) {
   return (await optedOutDomains()).some((d) => host === d || host.endsWith(`.${d}`));
 }
 
-/** Whether an article's page may be fetched: not opted out, and robots.txt allows it. */
-const mayFetchArticle = async (link) => !(await optedOut(link)) && (await robotsAllow(link));
 
 // ---- feeds that keep failing wait longer between tries: 1 hour, then 2, 4, …, up to a day.
 const BACKOFF_FIRST_MS = 60 * 60 * 1000;
@@ -380,7 +376,8 @@ async function noteFeedFailure(feed, message) {
 
 /** Whether a feed is waiting out its backoff (only automatic tries respect it). */
 const backingOff = (feed) => Boolean(feed.retryAfter && Date.parse(feed.retryAfter) > Date.now());
-if (fetchCache) setInterval(() => fetchCache.prune(ARTICLE_TTL_MS).catch(() => {}), 60 * 60 * 1000).unref();
+// Fetched feeds and their validators older than that are dropped.
+setInterval(() => fetchCache.prune(VALIDATORS_MS).catch(() => {}), 60 * 60 * 1000).unref();
 
 /**
  * Hosted, check the current library has room before adding to it; throws a
@@ -920,21 +917,9 @@ async function refreshFeed(feed) {
   if (!fetched.items.length) throw new Error('That feed currently has no items.');
   steps.push(`Fetched ${fetched.items.length} item(s)`);
 
-  const items = feed.fullText
-    ? await hydrateItems(fetched.items, {
-        limit: feed.limit,
-        articleCache,
-        mayFetch: mayFetchArticle,
-        extractArticle: (opts) => extractArticle({ ...opts, includeImages: false }),
-      })
-    : fetched.items.slice(0, feed.limit);
-
-  if (feed.fullText) {
-    const full = items.filter((i) => i.hydrated).length;
-    steps.push(`Fetched full text for ${full} of ${items.length}`);
-    const held = items.filter((i) => i.held).length;
-    if (held) steps.push(`Kept the feed's own text for ${held}: the site asks automated tools not to fetch those pages`);
-  }
+  // Only what the feed itself contains: its full text where the publisher
+  // includes it, otherwise its summary. Never the publisher's web pages.
+  const items = fetched.items.slice(0, feed.limit);
 
   // One pass over the whole feed: the chapter splitter breaks on the per-item
   // <h2>, so each article becomes a chapter with a working table of contents.
@@ -1091,17 +1076,18 @@ function aboutFetchingPage() {
       A fetched feed is kept for 10 minutes and shared by everyone who follows it, and the next fetch
       asks only for changes (If-None-Match / If-Modified-Since), so an unchanged feed costs a 304.
       Feeds that keep failing are tried less and less often, at most once a day.</li>
-      <li><strong>Article pages</strong>, only when a reader has switched on full text for that feed,
-      only where the site's <code>robots.txt</code> allows our user agent, one page per article. Pages
-      that robots.txt excludes are never fetched; the reader gets the feed's own text and a link.</li>
+      <li><strong>Pictures a feed names</strong> for its items (media:content, an image enclosure
+      and the like), once, when an edition is built, for the reader's own web view.</li>
       <li><strong>A single web page</strong> when a reader pastes its address to read it later.</li>
     </ul>
+    <p><strong>It never follows the links in a feed to take articles from your site.</strong> An
+    edition contains only what your feed itself contains: the full text where you publish it in the
+    feed, otherwise your summary, with links back to you.</p>
     <p>It never signs in to a site, sends cookies, or works around a paywall.</p>
 
     <h2>How it identifies itself</h2>
     <p>Every request carries this user agent:</p>
     <p><code>${escapeHtml(userAgent())}</code></p>
-    <p>In <code>robots.txt</code>, rules for <code>User-agent: A-PubReader</code> (or <code>*</code>) apply.</p>
 
     <h2>Credit</h2>
     <p>Every article names its publication, author and date, and links to the original at the top
@@ -1665,10 +1651,6 @@ const routes = {
     const payload = await body(req);
     await ensureRoom({ feeds: 1 });
     if (await optedOut(String(payload.url || ''))) return json(403, { error: OPTED_OUT_MESSAGE });
-    // Hosted, a new feed starts with the publisher's own feed text; fetching
-    // each article's page is something to switch on per feed. On your own
-    // computer (personal reading, like a read-later app) it starts on.
-    if (payload.fullText === undefined) payload.fullText = !HOSTED;
     try {
       const { feed, added } = await feeds.add(payload);
       // Probe the feed straight away so a typo surfaces now, not on refresh.

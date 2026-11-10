@@ -95,17 +95,6 @@
         const opts = document.createElement('div');
         opts.className = 'feed-opts';
 
-        const full = document.createElement('label');
-        const fullBox = document.createElement('input');
-        fullBox.type = 'checkbox';
-        fullBox.checked = feed.fullText !== false;
-        fullBox.title =
-          "Fetch each article's own page instead of using the feed's text, where the site allows it (robots.txt)";
-        fullBox.addEventListener('change', () =>
-          save(feed.id, { fullText: fullBox.checked })
-        );
-        full.append(fullBox, document.createTextNode(' full articles'));
-
         const limit = document.createElement('label');
         const limitBox = document.createElement('input');
         limitBox.type = 'number';
@@ -116,7 +105,7 @@
         limitBox.addEventListener('change', () => save(feed.id, { limit: Number(limitBox.value) }));
         limit.append(document.createTextNode('newest '), limitBox);
 
-        opts.append(full, limit);
+        opts.append(limit);
         bodyEl.appendChild(opts);
 
         if (feed.lastError) {

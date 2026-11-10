@@ -131,11 +131,12 @@ says what it fetches and how a publisher can opt out or send a takedown.
   feed costs the publisher a 304. A feed that keeps failing waits 1 hour, then
   2, 4, up to a day, before Refresh all or the new-article check tries again
   (refreshing it on its own always tries).
-- **Article pages** (full text) are fetched only where the site's
-  `robots.txt` allows `A-PubReader` (or `*`); otherwise the edition keeps the
-  feed's own text and the link. Hosted, a new feed starts with full text off,
-  and fetched article text stays in that person's library rather than being
-  shared between libraries. On your own computer full text starts on.
+- **Feed content only:** editions are built from what the feed itself
+  contains; the app never fetches the articles' own pages from feed links.
+  Pictures a feed names are downloaded once per edition for the web view.
+- **A pasted link** is different: you choose that page, the app converts the
+  whole page, and you first agree to use it only for your personal use, as if
+  you had printed it out.
 - **Publishers who opt out** are listed on the Admin page: their feeds cannot
   be added, refreshing them stops, their pages are never fetched, and they
   leave Find feeds.
@@ -406,9 +407,8 @@ stop the rest.
 A refresh:
 
 1. fetches the feed and takes the newest *N* items (per-feed, default 15),
-2. optionally fetches each linked article in full,
-3. builds one EPUB with one chapter per item,
-4. queues it.
+2. builds one EPUB with one chapter per item, from the feed's own content,
+3. queues it.
 
 Refreshing never touches the device, so it works with the reader switched off
 or in another building. Pushing the queue is a separate step — **Send to
@@ -421,12 +421,12 @@ one-off documents so the cleanup step can't touch anything else. Filenames are
 dated (`The Verge - 2026-09-02.epub`), so freshness is visible in the reader’s
 file list and a new day replaces the previous file rather than shadowing it.
 
-**Full articles** (per feed, on by default) fetches each item’s page and runs it
-through the normal article extractor. Many feeds ship only a truncated teaser,
-which is the wrong thing to carry somewhere to read offline. It costs roughly a
-second per item, and an item that fails — paywall, consent wall, timeout — keeps
-the feed’s own text and is marked *summary only* in the book rather than being
-dropped.
+**An edition contains only what the feed contains.** Where a publisher puts
+the full article in its feed (`content:encoded`, as many blogs and some news
+sites do), the edition has the full article; where the feed carries a summary,
+the edition has the summary, with links to the original above and below it. The
+app never follows an item's link to take the article from the publisher's web
+page.
 
 
 Removing a feed stops following it. Its latest edition stays in the Library

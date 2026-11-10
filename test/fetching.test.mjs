@@ -1,12 +1,13 @@
-// Fetching politely: the app's own user agent, robots.txt before fetching an
-// article's page, conditional requests for feeds (ETag / Last-Modified), and
-// a feed parser that refuses XML entity tricks. Against a small local site.
+// Fetching politely: the app's own user agent, conditional requests for feeds
+// (ETag / Last-Modified), pictures named in feeds, and a feed parser that
+// refuses XML entity tricks. Against a small local site.
 
 import http from 'node:http';
 
-import { fetchFeed, hydrateItems, parseFeed } from '../lib/rss.mjs';
-import { clearRobotsCache, parseRobots, robotsAllow, rulesAllow } from '../lib/robots.mjs';
-import { AGENT_NAME, configureUserAgent, userAgent } from '../lib/useragent.mjs';
+import * as rss from '../lib/rss.mjs';
+import { configureUserAgent, userAgent } from '../lib/useragent.mjs';
+
+const { fetchFeed, parseFeed } = rss;
 
 let pass = 0;
 let fail = 0;
@@ -26,37 +27,9 @@ configureUserAgent({ siteUrl: 'https://reader.example.org/' });
 assert(userAgent() === 'A-PubReader/2.0 (+https://reader.example.org/about/fetching)', 'hosted, it links to that install’s About fetching page');
 assert(!/Mozilla|Chrome|Safari/.test(userAgent()), 'and does not pretend to be a browser');
 
-console.log('\n== robots.txt rules ==');
-const groups = parseRobots(`
-# comments are ignored
-User-agent: *
-Disallow: /private/
-Allow: /private/open$
-Disallow: /*.pdf$
-
-User-agent: GPTBot
-User-agent: A-PubReader
-Disallow: /news/premium
-Allow: /news/premium/free
-`);
-assert(groups.length === 2 && groups[1].agents.join() === 'gptbot,a-pubreader', 'groups and their agents are read, including shared groups');
-assert(rulesAllow(groups, '/news/today') && !rulesAllow(groups, '/news/premium/story'), 'our own group applies when it names us');
-assert(rulesAllow(groups, '/news/premium/free/one'), 'the longest matching rule wins');
-assert(rulesAllow(groups, '/private/x'), "a group for us replaces the * group entirely");
-const star = parseRobots('User-agent: *\nDisallow: /private/\nAllow: /private/open$\nDisallow: /*.pdf$\nDisallow:\n');
-assert(!rulesAllow(star, '/private/x') && rulesAllow(star, '/private/open') && !rulesAllow(star, '/private/open/more'), 'otherwise the * group, with $ anchoring');
-assert(!rulesAllow(star, '/files/report.pdf') && rulesAllow(star, '/files/report.pdf?x=1'), '* wildcards match within a path');
-assert(rulesAllow(parseRobots('User-agent: *\nDisallow:\n'), '/anything'), 'an empty Disallow allows everything');
-assert(rulesAllow(parseRobots(''), '/anything') && rulesAllow(parseRobots('User-agent: Other\nDisallow: /\n'), '/x'), 'no rules for us means allowed');
-const tie = parseRobots('User-agent: *\nDisallow: /page\nAllow: /page\n');
-assert(rulesAllow(tie, '/page'), 'Allow wins a tie');
-assert(AGENT_NAME === 'A-PubReader', 'rules are matched against the name the app sends');
-
 // ------------------------------------------------------------ a local site
 
 const hits = [];
-let robotsBody = 'User-agent: *\nDisallow: /blocked/\n';
-let robotsStatus = 200;
 const FEED = `<?xml version="1.0"?><rss version="2.0"><channel><title>Local News</title><link>http://127.0.0.1/</link>
 <item><title>Open story</title><link>LINK/open/1</link><description>teaser one</description></item>
 <item><title>Blocked story</title><link>LINK/blocked/2</link><description>teaser two</description></item>
@@ -65,10 +38,6 @@ const ARTICLE = (title) => `<html><head><title>${title}</title></head><body><art
 
 const server = http.createServer((req, res) => {
   hits.push({ path: req.url, ua: req.headers['user-agent'], inm: req.headers['if-none-match'] || '', ims: req.headers['if-modified-since'] || '' });
-  if (req.url === '/robots.txt') {
-    res.writeHead(robotsStatus, { 'content-type': 'text/plain' });
-    return res.end(robotsBody);
-  }
   if (req.url === '/feed.xml') {
     if (req.headers['if-none-match'] === '"v1"') {
       res.writeHead(304);
@@ -96,31 +65,9 @@ try {
   assert(again.notModified === true, 'asked again with them, an unchanged feed answers 304 and is reused');
   assert(hits.at(-1).inm === '"v1"' && hits.at(-1).ims === first.lastModified, 'If-None-Match and If-Modified-Since were sent');
 
-  console.log('\n== robots.txt before article pages ==');
-  clearRobotsCache();
-  assert(await robotsAllow(`${base}/open/1`), 'an allowed page may be fetched');
-  assert(!(await robotsAllow(`${base}/blocked/2`)), 'a disallowed page may not');
-  const robotsFetches = hits.filter((h) => h.path === '/robots.txt').length;
-  await robotsAllow(`${base}/open/3`);
-  assert(hits.filter((h) => h.path === '/robots.txt').length === robotsFetches, 'robots.txt is fetched once and remembered');
-  assert(hits.find((h) => h.path === '/robots.txt').ua === userAgent(), 'with the app’s own user agent');
-
-  const before = hits.length;
-  const { extractArticle } = await import('../lib/extract.mjs');
-  const items = await hydrateItems(first.items, { limit: 2, mayFetch: robotsAllow, extractArticle: (o) => extractArticle({ ...o, includeImages: false }) });
-  assert(items[0].hydrated && !items[1].hydrated && items[1].held, 'a refresh fetches the allowed article and keeps the feed’s text for the disallowed one');
-  assert(!hits.slice(before).some((h) => h.path.startsWith('/blocked/')), 'the disallowed page is never requested');
-
-  clearRobotsCache();
-  robotsStatus = 404;
-  assert(await robotsAllow(`${base}/blocked/2`), 'no robots.txt (404) means allowed');
-  clearRobotsCache();
-  robotsStatus = 503;
-  assert(!(await robotsAllow(`${base}/open/1`)), 'a server error on robots.txt means not now');
-  clearRobotsCache();
-  robotsStatus = 200;
-  robotsBody = 'User-agent: A-PubReader\nDisallow: /\n';
-  assert(!(await robotsAllow(`${base}/open/1`)), 'a site can shut out this app by name');
+  console.log('\n== never the articles’ own pages ==');
+  assert(!('hydrateItems' in rss), 'the feed code has no way to fetch an article’s page');
+  assert(!hits.some((h) => h.path.startsWith('/open/') || h.path.startsWith('/blocked/')), 'and no article page was requested');
 } finally {
   server.close();
 }

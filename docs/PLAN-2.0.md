@@ -305,11 +305,13 @@ problem or a full account.
 
 Honest user agent (`A-PubReader/2.0 (+…/about/fetching)`), a public About
 fetching page with the opt-out and DMCA contact (`CONTACT_EMAIL`, else
-`ADMIN_EMAIL`), robots.txt before article pages (RFC 9309), hosted full text
-off by default with per-library article caching, an admin opt-out list,
-conditional feed requests and backoff. Still to do outside the code:
+`ADMIN_EMAIL`), an admin opt-out list, conditional feed requests and backoff.
+**Decided (Dan, 2026-11-10): editions never scrape article pages from feed
+links**; they contain only what the feed contains. The full-text option and
+the robots.txt code were removed. A pasted link still converts the whole page,
+after agreeing to personal use "as if printed". Still to do outside the code:
 **register a DMCA designated agent** with the US Copyright Office for the
-hosted service, have Syracuse counsel review the full-text policy, and write
+hosted service, and write
 the Terms of Use and Privacy pages (Phase 3, Legal pages): personal and
 non-commercial use, users responsible for what they add, a repeat-infringer
 policy, and what is stored.

@@ -279,6 +279,8 @@ try {
   const agreeJs = await (await fetch(`http://127.0.0.1:${APP_PORT}/agree.js`)).text();
   assert(/<script src="\/agree\.js" defer><\/script>/.test(home) && /<script src="\/agree\.js" defer><\/script>/.test(webHtml), 'the app and every reading page ask for agreement before a download');
   assert(agreeJs.includes('I agree to use this ePub file solely for my personal, non-commercial use.') && /\\\/out\\\/\[0-9a-f-\]\{36\}\$/.test(agreeJs) && /ebooks\\\.zip/.test(agreeJs), 'with that wording, for a single eBook and for the whole library');
+  const appJs = await (await fetch(`http://127.0.0.1:${APP_PORT}/app.js`)).text();
+  assert(appJs.includes('I agree to consume this content only for my personal use, as if I had printed it out.') && /apubAgree\(PAGE_AGREEMENT\)/.test(appJs) && /window\.apubAgree = ask/.test(agreeJs), 'adding a pasted page first asks to agree to personal use, as if printed');
   assert(/id="type-turn"[\s\S]*value="curl"[\s\S]*value="swing"[\s\S]*value="none"/.test(home), 'the eBook view offers corner curl, swing or no page turn');
   const themeCss = await (await fetch(`http://127.0.0.1:${APP_PORT}/themes.css`)).text();
   const themeJs = await (await fetch(`http://127.0.0.1:${APP_PORT}/theme.js`)).text();
@@ -526,10 +528,16 @@ try {
   const rss = () =>
     `<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>Stand-in Feed</title><link>http://127.0.0.1/</link>` +
     feedItems
-      .map((i, n) => `<item><title>${i.title}</title><link>http://127.0.0.1/${encodeURIComponent(i.title)}</link><pubDate>${i.date.toUTCString()}</pubDate>${n === 0 ? `<media:content url="http://127.0.0.1:${feedServer.address().port}/picture.png" medium="image" width="400"/>` : ''}<description>&lt;p&gt;${paragraph.repeat(2)}&lt;/p&gt;</description></item>`)
+      .map((i, n) => `<item><title>${i.title}</title><link>http://127.0.0.1:${feedServer.address().port}/story/${encodeURIComponent(i.title)}</link><pubDate>${i.date.toUTCString()}</pubDate>${n === 0 ? `<media:content url="http://127.0.0.1:${feedServer.address().port}/picture.png" medium="image" width="400"/>` : ''}<description>&lt;p&gt;${paragraph.repeat(2)}&lt;/p&gt;</description></item>`)
       .join('') +
     `</channel></rss>`;
+  const standInRequests = [];
   const feedServer = http.createServer((req, res) => {
+    standInRequests.push(req.url);
+    if (req.url.startsWith('/story/')) {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      return res.end(`<html><body><article><h1>Story</h1><p>${paragraph.repeat(6)}</p></article></body></html>`);
+    }
     if (req.url === '/picture.png') {
       res.writeHead(200, { 'content-type': 'image/png' });
       return res.end(picturePng);
@@ -540,12 +548,13 @@ try {
   await new Promise((r) => feedServer.listen(0, '127.0.0.1', r));
   const feedUrl = `http://127.0.0.1:${feedServer.address().port}/feed.xml`;
   try {
-    const added = await api('/api/feeds/add', { method: 'POST', body: JSON.stringify({ url: feedUrl, fullText: false, limit: 5 }) });
+    const added = await api('/api/feeds/add', { method: 'POST', body: JSON.stringify({ url: feedUrl, limit: 5 }) });
     const standIn = added.body.feed;
     const notBuilt = (await api('/api/feeds/check')).body.feeds.find((f) => f.feedId === standIn.id);
     assert(notBuilt?.newCount === 2 && notBuilt.hasEdition === false, `before any refresh, all its articles are new: ${notBuilt?.newCount}`);
 
     const refreshed = await api('/api/feeds/refresh', { method: 'POST', body: JSON.stringify({ id: standIn.id }) });
+    assert(!standInRequests.some((u) => u.startsWith('/story/')), 'a refresh never fetches the articles’ own pages, only the feed (and pictures it names)');
     assert(refreshed.body.results[0].steps.some((step) => /Kept 1 picture/.test(step)), 'a refresh keeps the pictures the feed gives, for the web view');
     const edition = (await api('/api/reading')).body.items.find((i) => i.feedId === standIn.id);
     const pictured = edition?.articles?.find((a) => a.image);
@@ -565,7 +574,7 @@ try {
     const counted = later.body.feeds.find((f) => f.feedId === standIn.id);
     assert(counted?.newCount === 1, `an article published since then counts as new: ${counted?.newCount}`);
     assert(
-      counted?.articles?.[0]?.title === 'Third story, published since the refresh' && /^http:\/\/127\.0\.0\.1\//.test(counted.articles[0].link || ''),
+      counted?.articles?.[0]?.title === 'Third story, published since the refresh' && /^http:\/\/127\.0\.0\.1[:/]/.test(counted.articles[0].link || ''),
       'and the check names it, with its link, for the Library to list'
     );
     assert(later.body.newCount >= 1, 'and in the total');

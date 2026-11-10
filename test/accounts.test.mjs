@@ -141,7 +141,7 @@ try {
   assert((await stranger.call('/app.js')).status === 302, "but not the app's own files");
   assert((await stranger.call('/admin')).status === 302 && (await stranger.call('/admin/admin.js')).status === 302, 'nor the admin page or its script');
   const about = await stranger.call('/about/fetching');
-  assert(about.status === 200 && /A-PubReader\/2\.0/.test(about.text) && /robots\.txt/.test(about.text) && /boss@example\.com/.test(about.text), 'the About fetching page is public, naming the user agent and a contact for publishers');
+  assert(about.status === 200 && /A-PubReader\/2\.0/.test(about.text) && /never follows the links in a feed/i.test(about.text) && /boss@example\.com/.test(about.text), 'the About fetching page is public, naming the user agent and a contact for publishers');
   const me = await stranger.call('/api/auth/me');
   assert(me.data?.accounts === true && me.data.user === null, 'who-am-I says accounts are on and no one is signed in');
 
@@ -272,7 +272,7 @@ try {
 
   console.log('\n== being a good citizen ==');
   const feedAdd = await reader.call('/api/feeds/add', { method: 'POST', body: { url: 'https://203.0.113.5/feed.xml' } });
-  assert(feedAdd.status === 200 && feedAdd.data.feed.fullText === false, 'hosted, a new feed starts with the feed’s own text (full text off)');
+  assert(feedAdd.status === 200 && !('fullText' in feedAdd.data.feed), 'a new feed has no full-text option: editions are the feed’s own text');
   const failing = feedAdd.data.feed.id;
   const firstTry = await reader.call('/api/feeds/refresh', { method: 'POST', body: {} });
   const failedFeed = (await reader.call('/api/feeds')).data.feeds.find((f) => f.id === failing);

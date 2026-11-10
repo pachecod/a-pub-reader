@@ -21,7 +21,6 @@ import { LOCAL_OWNER, checkOwner, databaseBackend, fileBackend } from '../lib/st
 import { MemoryFetchCache, PgFetchCache, sharedFetcher } from '../lib/store/fetchcache.mjs';
 import { composeFeedHtml, withDates } from '../lib/rss.mjs';
 import { DEFAULT_LIMITS, LimitError, checkLimits, resolveLimits } from '../lib/limits.mjs';
-import { hydrateItems } from '../lib/rss.mjs';
 import pg from 'pg';
 
 let pass = 0;
@@ -204,20 +203,6 @@ for (const [label, cache] of [['database', new PgFetchCache(db)], ['memory', new
 
 await new PgFetchCache(db).prune(0);
 assert((await db.query('SELECT count(*)::int AS n FROM fetch_cache')).rows[0].n === 0, 'old cache entries are pruned');
-
-const articleStore = new Map();
-const articleCache = { get: async (k) => articleStore.get(k) ?? null, set: async (k, v) => articleStore.set(k, v) };
-articleStore.set('https://news.example/1', { hydrated: true, html: '<p>Full text from the cache</p>', author: 'Cached Author' });
-articleStore.set('https://news.example/2', { hydrated: false });
-const hydrated = await hydrateItems(
-  [
-    { title: 'One', link: 'https://news.example/1', html: '<p>teaser</p>', author: '' },
-    { title: 'Two', link: 'https://news.example/2', html: '<p>teaser two</p>', author: '' },
-  ],
-  { limit: 5, articleCache, extractArticle: () => { throw new Error('should not fetch'); } }
-);
-assert(hydrated[0].hydrated && /from the cache/.test(hydrated[0].html) && hydrated[0].author === 'Cached Author', 'an article in the cache is not fetched again');
-assert(!hydrated[1].hydrated && hydrated[1].html === '<p>teaser two</p>', 'a cached "no better than the teaser" keeps the teaser');
 
 await alice.clearFiles();
 assert(!(await fs.access(path.join(sandbox, 'files', 'users', 'alice')).then(() => true, () => false)), "clearing files removes the owner's folder");

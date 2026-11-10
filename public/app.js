@@ -183,13 +183,18 @@ window.epubDrop = {
   editorShown: () => window.epubDropEditor?.shown?.(),
 };
 
-function addUrls() {
+// A pasted page is copied whole, so first the person agrees to keep it for
+// their own use, as with a printout (agree.js). Cancel adds nothing.
+const PAGE_AGREEMENT = 'I agree to consume this content only for my personal use, as if I had printed it out.';
+
+async function addUrls() {
   const lines = el.urlInput.value
     .split(/[\n\s]+/)
     .map((s) => s.trim())
     .filter(Boolean);
 
   if (!lines.length) return;
+  if (window.apubAgree && !(await window.apubAgree(PAGE_AGREEMENT))) return;
   for (const url of lines) {
     queue.push({ key: crypto.randomUUID(), kind: 'url', name: url, url });
   }
