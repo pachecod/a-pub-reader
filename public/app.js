@@ -28,6 +28,7 @@ const el = {
   syncLibrary: $('read-sync'),
   sendBottom: $('send-bottom'),
   syncLibraryStatus: $('read-sync-status'),
+  queueStatus: $('queue-status'),
   device: $('device'),
   deviceText: $('device-text'),
   deviceLabel: $('device-label'),
@@ -196,8 +197,21 @@ function addUrls() {
   renderQueue();
 }
 
+let shownQueueLength = 0;
+
 function renderQueue() {
   el.queueSection.classList.toggle('hidden', queue.length === 0);
+  // Something was just added: if the list is off screen (a narrow window puts
+  // it below Add content), bring it into view so it is clear where it went.
+  if (queue.length > shownQueueLength) {
+    requestAnimationFrame(() => {
+      const box = el.queueSection.getBoundingClientRect();
+      if (box.height && (box.top > window.innerHeight - 80 || box.bottom < 0)) {
+        el.queueSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+  shownQueueLength = queue.length;
   el.queueCount.textContent = queue.length ? `· ${queue.length}` : '';
   el.convert.disabled = busy || queue.length === 0;
 
@@ -290,10 +304,20 @@ async function convert() {
         : `Converted ${okCount} file${okCount === 1 ? '' : 's'}.`,
       failed.length ? 'bad' : 'ok'
     );
+    el.queueStatus.textContent = failed.map((r) => `${r.label}: ${r.error}`).join(' · ');
+    el.queueStatus.className = `status ${failed.length ? 'bad' : ''}`;
+    // Hosted there is no sync list beside the queue to show the new items, so
+    // go to the Library, where they now are.
+    if (hosted && okCount && !failed.length && window.epubDropTabs?.current() === 'add') {
+      window.epubDropTabs.show('read');
+      window.epubDropRead?.load?.();
+    }
 
     return { ok: !failed.length, okCount, failed: failed.length };
   } catch (err) {
     setStatus(err.message, 'bad');
+    el.queueStatus.textContent = err.message;
+    el.queueStatus.className = 'status bad';
     return { ok: false, error: err.message };
   } finally {
     setBusy(false, el.convert, 'Convert to EPUB');

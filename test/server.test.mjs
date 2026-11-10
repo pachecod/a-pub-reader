@@ -270,6 +270,10 @@ try {
   assert(/href="\/themes\.css"/.test(webHtml) && /<script src="\/theme\.js"><\/script>/.test(webHtml) && /data-theme-choices/.test(webHtml), 'a reading page offers the color themes');
   const home = await (await fetch(`http://127.0.0.1:${APP_PORT}/`)).text();
   assert(/href="\/themes\.css"/.test(home) && /<script src="\/theme\.js"><\/script>/.test(home) && /data-theme-toggle/.test(home), 'the app has the color theme picker');
+  // Hosted hides .device-only; the files waiting to convert must not be in it.
+  const queueColumnStart = home.lastIndexOf('<div class="column', home.indexOf('id="queue-section"'));
+  const queueColumnTag = home.slice(queueColumnStart, home.indexOf('>', queueColumnStart) + 1);
+  assert(!/device-only/.test(queueColumnTag) && /id="results-section" class="device-only"/.test(home), 'when hosted, the waiting files and Convert stay visible; only syncing is hidden');
   assert(/id="site-dialog"[\s\S]*Article not fetched from feed yet[\s\S]*id="site-cancel"[\s\S]*id="site-ok"/.test(home), 'opening a not-yet-fetched article asks first');
   assert(/id="type-turn"[\s\S]*value="curl"[\s\S]*value="swing"[\s\S]*value="none"/.test(home), 'the eBook view offers corner curl, swing or no page turn');
   const themeCss = await (await fetch(`http://127.0.0.1:${APP_PORT}/themes.css`)).text();

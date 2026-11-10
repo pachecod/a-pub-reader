@@ -828,6 +828,15 @@ a { color: var(--accent); }
 .hosted .reader-switch,
 .hosted #pending-badge { display: none !important; }
 .hosted .columns { grid-template-columns: minmax(0, 1fr); }
+/* Hosted, the right column holds only the files waiting to be converted: it
+   appears beside Add content while there are some, and is gone otherwise. */
+.hosted-only { display: none; }
+.hosted .hosted-only { display: inline; }
+.hosted .queue-column:has(#queue-section.hidden) { display: none; }
+.hosted .columns:has(#queue-section:not(.hidden)) { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+@media (max-width: 900px) {
+  .hosted .columns:has(#queue-section:not(.hidden)) { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Add/Remove: the sync controls open the queue, and Sync Reader closes it. */
 .sync-controls { margin-top: 0.6rem; }

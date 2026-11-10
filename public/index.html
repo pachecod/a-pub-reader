@@ -250,8 +250,10 @@
         <p id="feeds-status" class="status"></p>
         </section>
       </div>
-      <div class="column device-only">
-        <h2 class="column-title">Push to reader</h2>
+      <!-- Hosted, there is no reader: the waiting files and Convert stay,
+           and only the sync parts are hidden. -->
+      <div class="column queue-column">
+        <h2 class="column-title"><span class="device-only">Push to reader</span><span class="hosted-only">Ready to convert</span></h2>
         <section id="queue-section" class="hidden">
         <div class="row-between">
         <h2>Queue <span id="queue-count" class="muted"></span></h2>
@@ -263,6 +265,8 @@
         <label class="check"><input id="image-mode" type="checkbox"> Page images (comic style)</label>
         <button id="convert" type="button" class="primary">Convert to EPUB</button>
         </div>
+        <!-- Why a file failed, beside the list it stays in for another try. -->
+        <p id="queue-status" class="status" aria-live="polite"></p>
         <div id="image-options" class="sub-options" hidden>
         <label class="field">
         Resolution
@@ -298,7 +302,7 @@
         </p>
         </div>
         </section>
-        <section id="results-section">
+        <section id="results-section" class="device-only">
         <div class="row-between">
         <h2>Sync with reader <span id="results-count" class="muted"></span></h2>
         </div>
