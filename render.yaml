@@ -4,6 +4,11 @@
 # creates the web service and a PostgreSQL database, and asks for the values
 # marked `sync: false` (secrets are entered in Render, never kept in git).
 #
+# Accounts: everyone signs in with their own username and password and gets
+# their own library. The first admin is made from ADMIN_USERNAME and
+# ADMIN_PASSWORD on the first start with no admin; after that those two do
+# nothing, and admins add everyone else on the Admin page.
+#
 # Hosted, the app cannot reach a reader on your home Wi-Fi, a card in your Mac
 # or a synced folder on it, so syncing is switched off; everything else —
 # feeds, files, links, books, writing, reading in the browser, and downloading
@@ -34,12 +39,22 @@ services:
         value: "26.13.0"
       - key: NODE_ENV
         value: production
-      # Listen publicly. This also turns on hosted mode and requires a password.
+      # Listen publicly. This also turns on hosted mode (and, with the database
+      # below, accounts).
       - key: HOST
         value: 0.0.0.0
-      # The password the app asks for: at least 12 characters, not a common one.
-      - key: APP_PASSWORD
+      # The first administrator, made once (see above). The password: at least
+      # 12 characters, not a common one. The email is optional.
+      - key: ADMIN_USERNAME
         sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      # Lets admins look up a password they set, until the person picks their
+      # own. Render makes a random key; keep it, or lookups stop working.
+      - key: PASSWORD_LOOKUP_KEY
+        generateValue: true
       # The database below.
       - key: DATABASE_URL
         fromDatabase:

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Users · A-Pub Reader admin</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/themes.css">
+<script src="/theme.js"></script>
+</head>
+<!-- Served only to administrators (the server checks before sending this page
+     or its script); the calls it makes are checked again on their own. -->
+<body class="auth-page">
+<header class="menubar">
+  <a href="/" class="brand" aria-label="A-Pub Reader, home">
+    <img src="/logo.svg" alt="" width="28" height="28">
+    <h1>A-Pub Reader</h1>
+  </a>
+  <nav class="tabs" aria-label="Sections">
+    <a class="tab" href="/">Library</a>
+    <a class="tab" href="/admin" aria-current="page">Admin · Users</a>
+  </nav>
+  <span class="menubar-spacer"></span>
+  <a class="tab" href="/account">Your account</a>
+</header>
+
+<main class="admin-main">
+  <section class="auth-card admin-card">
+    <div class="row-between">
+      <h2>Users <span id="users-count" class="muted"></span></h2>
+    </div>
+    <p id="lookup-note" class="muted admin-note"></p>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr><th>User</th><th>Role</th><th>Status</th><th>Password</th><th>Last sign-in</th><th><span class="visually-hidden">Actions</span></th></tr>
+        </thead>
+        <tbody id="users"></tbody>
+      </table>
+    </div>
+    <p id="users-status" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="auth-card admin-card">
+    <h2>Add a user</h2>
+    <form id="create-form" class="admin-create" novalidate>
+      <label class="auth-field">
+        <span>Username</span>
+        <input id="create-username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <label class="auth-field">
+        <span>Email <small class="muted">(optional)</small></span>
+        <input id="create-email" type="email" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="auth-field">
+        <span>Role</span>
+        <select id="create-role">
+          <option value="user" selected>User</option>
+          <option value="admin">Administrator</option>
+        </select>
+      </label>
+      <label class="auth-field">
+        <span>Password <small class="muted">(leave blank to make a readable one)</small></span>
+        <input id="create-password" type="text" autocomplete="off" spellcheck="false">
+      </label>
+      <button id="create-submit" type="submit" class="primary">Add user</button>
+    </form>
+    <p id="create-status" class="status" role="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<!-- Shows a password once, after creating a user or resetting one. -->
+<dialog id="password-dialog" class="dialog">
+  <h2 id="password-title">Password</h2>
+  <p class="muted" id="password-lead"></p>
+  <p class="admin-password"><code id="password-value"></code></p>
+  <div class="dialog-actions">
+    <button id="password-copy" type="button" class="secondary">Copy</button>
+    <button id="password-close" type="button" class="primary">Done</button>
+  </div>
+</dialog>
+
+<dialog id="delete-dialog" class="dialog">
+  <h2>Delete this account?</h2>
+  <p class="muted" id="delete-body"></p>
+  <label class="field" for="delete-confirm">Type the username to confirm
+    <input id="delete-confirm" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+  </label>
+  <div class="dialog-actions">
+    <button id="delete-cancel" type="button" class="link">Cancel</button>
+    <button id="delete-go" type="button" class="danger" disabled>Delete account and library</button>
+  </div>
+</dialog>
+
+<script src="/admin/admin.js"></script>
+</body>
+</html>

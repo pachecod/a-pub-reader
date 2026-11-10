@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your account · A-Pub Reader</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/themes.css">
+<script src="/theme.js"></script>
+</head>
+<body class="auth-page">
+<header class="menubar">
+  <a href="/" class="brand" aria-label="A-Pub Reader, home">
+    <img src="/logo.svg" alt="" width="28" height="28">
+    <h1>A-Pub Reader</h1>
+  </a>
+  <nav class="tabs" aria-label="Sections">
+    <a class="tab" href="/">Library</a>
+    <a class="tab" href="/?tab=add">Add/Remove</a>
+    <a class="tab" href="/?tab=write">Write</a>
+  </nav>
+  <span class="menubar-spacer"></span>
+  <a id="admin-link" class="tab" href="/admin" hidden>Admin</a>
+</header>
+
+<main class="account-main">
+  <section class="auth-card account-card">
+    <h2>Your account</h2>
+    <p id="account-who" class="account-who"></p>
+    <p id="account-adminset" class="account-notice" hidden>
+      An administrator set your password. Choose one of your own below; after that,
+      no one else can see it.
+    </p>
+  </section>
+
+  <section class="auth-card account-card">
+    <h2>Change your password</h2>
+    <form id="password-form" class="auth-form" novalidate>
+      <label class="auth-field">
+        <span>Current password</span>
+        <input id="password-current" type="password" autocomplete="current-password" required>
+      </label>
+      <label class="auth-field">
+        <span>New password</span>
+        <input id="password-next" type="password" autocomplete="new-password" minlength="10" required>
+        <small class="muted">At least 10 characters. A few words together is easy to remember and hard to guess.</small>
+      </label>
+      <label class="auth-field">
+        <span>New password again</span>
+        <input id="password-again" type="password" autocomplete="new-password" required>
+      </label>
+      <button id="password-submit" type="submit" class="primary auth-submit">Change password</button>
+      <p id="password-status" class="status" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <section class="auth-card account-card">
+    <h2>Signing out</h2>
+    <p id="account-sessions" class="muted"></p>
+    <div class="account-actions">
+      <button id="signout" type="button" class="secondary">Sign out</button>
+      <button id="signout-all" type="button" class="secondary">Sign out everywhere</button>
+    </div>
+    <p id="signout-status" class="status" role="status" aria-live="polite"></p>
+  </section>
+</main>
+<script src="/account.js"></script>
+</body>
+</html>

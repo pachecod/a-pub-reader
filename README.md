@@ -72,11 +72,42 @@ Cloudflare), so it survives restarts and redeploys and is ready for many users.
    bucket's S3 endpoint (for example `https://s3.us-west-004.backblazeb2.com`).
 2. In Render: **New → Blueprint**, pick the repository and the `v2` branch.
    Render creates the web service and a PostgreSQL database.
-3. Enter the values it asks for: **APP_PASSWORD** (at least 12 characters, and
-   not a common one, or the app refuses to start) and the four **STORAGE_**
-   settings from step 1. They live in Render, never in the repository.
-4. Open the service's `onrender.com` address, on the Boox or anywhere else. The
-   browser asks for the password (any user name) before showing anything.
+3. Enter the values it asks for: **ADMIN_USERNAME** and **ADMIN_PASSWORD** for
+   the first administrator (the password at least 12 characters, and not a
+   common one, or the app refuses to start), **ADMIN_EMAIL** if you like, and
+   the four **STORAGE_** settings from step 1. Render makes
+   **PASSWORD_LOOKUP_KEY** itself. They live in Render, never in the repository.
+4. Open the service's `onrender.com` address, on the Boox or anywhere else, and
+   sign in as that administrator. **Admin** (under your name, top right) adds
+   everyone else, each with their own library.
+
+### Accounts
+
+With a database, a hosted install has accounts. Everyone signs in with a
+username (or email) and password, and has a private library; no one can open
+another person's items, even knowing their address.
+
+- **Admins add people** on the Admin page, typing a password or letting the app
+  make a readable one (four words and two digits), shown once. People change
+  it under **Your account**, which also signs them out everywhere.
+- **Passwords are stored only as scrypt hashes**, which cannot be turned back
+  into the password. A password an admin set is also kept encrypted (with
+  `PASSWORD_LOOKUP_KEY`) so the admin can look it up again, until the person
+  chooses their own: then the copy is deleted and no one can ever see it.
+- **Sessions** are a random token in an HttpOnly, SameSite cookie (`__Host-`
+  and Secure over HTTPS), stored only as a hash, lasting 30 days from the last
+  visit. Changing or resetting a password, switching an account off, and
+  "sign out everywhere" end them.
+- Ten wrong passwords for an account, or from one address, pause sign-in for 15
+  minutes. Admins cannot demote, switch off or delete themselves, and the last
+  admin cannot be removed. Deleting an account deletes its library.
+- The first admin, made from `ADMIN_USERNAME`/`ADMIN_PASSWORD`, takes over the
+  library the install had before accounts, so a trial library carries on.
+
+On your own computer the app stays single-user. To try accounts there, run it
+with `ACCOUNTS=1`, an admin's details and a database; `DATABASE_URL=pglite:<a
+folder>` uses an embedded PostgreSQL, so nothing else needs installing
+(PGlite comes with the development dependencies).
 
 Both start on Render's free plans, which suit trying 2.0 out: the free database
 is deleted after 30 days and the free service sleeps when idle. For real use,
@@ -86,11 +117,14 @@ Hosting is controlled by environment variables:
 
 | Variable | Meaning |
 |---|---|
-| `HOST` | Where to listen. Unset keeps it on this computer; `0.0.0.0` listens publicly, turns on hosted mode, and requires `APP_PASSWORD`. |
-| `APP_PASSWORD` | The password for every page and request (HTTP Basic sign-in). At least 12 characters when listening publicly. Ten wrong tries lock that address out for 15 minutes. |
+| `HOST` | Where to listen. Unset keeps it on this computer; `0.0.0.0` listens publicly and turns on hosted mode, which needs accounts (`DATABASE_URL`) or `APP_PASSWORD`. |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL` | The first administrator, made on the first start with accounts and no admin; unused after that. The password must be at least 12 characters and not a common one. |
+| `PASSWORD_LOOKUP_KEY` | 32 random bytes (base64 or hex) for looking up passwords an admin set. Unset, lookup is off and a password is shown once. Render generates it. |
+| `ACCOUNTS=1` | Accounts on your own computer, with `DATABASE_URL` (on whenever hosted with a database). |
+| `APP_PASSWORD` | Hosted without a database: one password for every page (HTTP Basic sign-in), at least 12 characters. Ten wrong tries lock that address out for 15 minutes. Unused with accounts. |
 | `TRUST_PROXY_HOPS` | How many proxies in front of the app add to `X-Forwarded-For` (default 1 when listening publicly, as on Render; 0 on this computer). |
 | `HOSTED=1` | Hosted mode without listening publicly (used by the tests). |
-| `DATABASE_URL` | PostgreSQL to keep libraries in. Unset, the library is files on disk. Migrations run at startup. |
+| `DATABASE_URL` | PostgreSQL to keep libraries and accounts in (`pglite:<folder>` for an embedded one). Unset, the library is files on disk. Migrations run at startup. |
 | `DATABASE_SSL` | `1` or `0` to force TLS to the database on or off (normally worked out from the address). |
 | `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY` | An S3-compatible bucket for files, with `DATABASE_URL`. All four or none; without them files stay on the server's disk. |
 | `STORAGE_REGION`, `STORAGE_PREFIX` | The bucket's region (default `auto`) and a folder inside it for this install. |
@@ -614,6 +648,9 @@ lib/security.mjs  headers, same-origin and Host checks, secrets, rate limits
 lib/limits.mjs    per-library limits when hosted
 lib/store/        storage: JSON files or PostgreSQL for records, disk or an
                   S3-compatible bucket for files, one library per owner
+lib/accounts/     accounts: password hashing and rules, lookup, users and sessions
+lib/pdfjob.mjs    converts PDFs in a short-lived child process (memory)
+admin/            the admin pages, served only to administrators
 public/           UI (no build step)
 out/              generated EPUBs and page images
 drafts/           your drafts, one JSON per draft

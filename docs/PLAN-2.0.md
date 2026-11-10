@@ -174,6 +174,16 @@ library does not sit in memory. It works locally too.
 ## 5. Phase 2 — Accounts and sign-in
 
 ### 2a. Admin-created accounts (first, the WebXRIDE approach)
+
+**Status: 2a built 2026-11-10** (local `v2`). Tables `users` and `sessions`
+(migration `002_accounts`); `lib/accounts/` (scrypt hashing, password rules,
+readable passwords, AES-GCM lookup, the store); a sign-in page, Your account,
+and a basic Admin · Users page (served only after the admin check) with add,
+reset, look up, role, switch off and on, sign out everywhere and delete. With a
+database, hosted means accounts; the first admin comes from `ADMIN_*` and takes
+over the pre-accounts `shared` library. `DATABASE_URL=pglite:<folder>` runs on
+an embedded PostgreSQL (tests, and trying accounts locally). Tests:
+`test/accounts.test.mjs`. The full Users page (counts, CSV, roles) is Phase 3.
 - Admin creates users, types a password or has the server generate a readable
   one (WebXRIDE's `generateRandomPassword` pattern), and hands it out; users can
   change it after signing in. **Sign-in is username (or email) and password

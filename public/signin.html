@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · A-Pub Reader</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/themes.css">
+<script src="/theme.js"></script>
+</head>
+<body class="auth-page">
+<main class="auth-main">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <img src="/logo.svg" alt="" width="36" height="36">
+      <h1>A-Pub Reader</h1>
+    </div>
+    <form id="signin-form" class="auth-form" novalidate>
+      <label class="auth-field">
+        <span>Username or email</span>
+        <input id="signin-login" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <label class="auth-field">
+        <span>Password</span>
+        <input id="signin-password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button id="signin-submit" type="submit" class="primary auth-submit">Sign in</button>
+      <p id="signin-status" class="status" role="alert" aria-live="assertive"></p>
+    </form>
+    <p class="auth-note muted">Accounts are made by an administrator. If you need one, or have forgotten your password, ask them.</p>
+  </div>
+</main>
+<script src="/signin.js"></script>
+</body>
+</html>

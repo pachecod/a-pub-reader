@@ -1008,6 +1008,9 @@ a { color: var(--accent); }
   font-weight: 600;
 }
 .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+/* Tabs that are links (account and admin pages). */
+a.tab { display: flex; align-items: center; text-decoration: none; }
+a.tab[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 
 /* Narrow screens: the name gives way to the logo, the items close up. */
 @media (max-width: 640px) {
@@ -1431,3 +1434,122 @@ textarea:focus, input[type="text"]:focus, input[type="number"]:focus, select:foc
 /* Headings carry the structure, so give them full contrast. */
 h2, .column-title { color: var(--text); }
 
+
+/* ---- accounts: sign-in, your account, admin · users */
+.auth-page { padding-bottom: 3rem; }
+.auth-main { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem 1rem; }
+.auth-card {
+  width: 100%;
+  max-width: 26rem;
+  padding: 1.6rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+}
+.auth-card h2 { font-size: 1.05rem; margin: 0 0 0.9rem; }
+.auth-brand { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1.3rem; }
+.auth-brand h1 { font-size: 1.25rem; margin: 0; }
+.auth-form { display: flex; flex-direction: column; gap: 0.9rem; }
+.auth-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; font-weight: 500; color: var(--text); }
+.auth-field input, .auth-field select {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+.auth-field input:focus-visible, .auth-field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.auth-field small { font-weight: 400; }
+.auth-submit { padding: 0.6rem 1rem; font-size: 0.95rem; }
+.auth-note { margin: 1.1rem 0 0; font-size: 0.8rem; }
+
+.account-main, .admin-main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 1.2rem; align-items: center; }
+.account-card { max-width: 32rem; }
+.account-who { margin: 0; }
+.account-notice {
+  margin: 0.8rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  font-size: 0.88rem;
+}
+.account-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+.admin-card { max-width: none; }
+.admin-note { margin: -0.4rem 0 0.8rem; font-size: 0.82rem; }
+.admin-table-wrap { overflow-x: auto; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.admin-table th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line-strong); }
+.admin-table td { padding: 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.admin-table tr.is-off td { opacity: 0.6; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; }
+.admin-actions .link { font-size: 0.82rem; }
+.danger-link { color: var(--bad) !important; }
+.admin-create { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.9rem; align-items: end; }
+.admin-password { margin: 0.6rem 0 1rem; }
+.admin-password code { display: inline-block; padding: 0.5rem 0.75rem; border-radius: 8px; background: var(--panel-2); font-size: 1.05rem; letter-spacing: 0.02em; user-select: all; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* The account menu in the top bar (user-menu.js). */
+.user-menu { position: relative; display: flex; align-items: center; }
+.user-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 34px;
+  padding: 0 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  box-shadow: none;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-toggle[aria-expanded="true"], .user-toggle:hover { border-color: var(--accent); }
+.user-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--warn); flex: none; }
+.user-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 13rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 36px rgba(16, 24, 40, 0.22);
+  display: flex;
+  flex-direction: column;
+}
+.user-panel[hidden] { display: none; }
+.user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  text-decoration: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+.user-menu-item:hover, .user-menu-item:focus-visible { background: var(--panel-2); color: var(--accent); outline: none; }
+@media (max-width: 640px) {
+  .user-toggle { max-width: 6.5rem; padding: 0 0.5rem; }
+}

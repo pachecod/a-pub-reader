@@ -28,7 +28,10 @@ import { ARTICLE_TTL_MS, FEED_TTL_MS, MemoryFetchCache, PgFetchCache, sharedFetc
 import { BOOKS_FOLDER, DOCS_FOLDER, FEED_FOLDER, NOTES_FOLDER, moveDocumentsToTheirFolder } from './lib/folders.mjs';
 import { DiskBlobs, S3Blobs } from './lib/store/blobs.mjs';
 import { LOCAL_OWNER, SHARED_OWNER, databaseBackend, fileBackend } from './lib/store/backend.mjs';
-import { migrate, openPostgres } from './lib/store/db.mjs';
+import { migrate, openDatabase } from './lib/store/db.mjs';
+import { AccountStore, SESSION_DAYS } from './lib/accounts/store.mjs';
+import { hashPassword, passwordProblem, readablePassword, verifyPassword } from './lib/accounts/passwords.mjs';
+import { lookupKey, openPassword, sealPassword } from './lib/accounts/lookup.mjs';
 import { mediaTypeFor, readChapter, readEpub, readEpubFile } from './lib/epubread.mjs';
 import { renderWebPage } from './lib/webread.mjs';
 import { pruneSummaries, summarize } from './lib/summary.mjs';
@@ -89,10 +92,16 @@ const APP_PASSWORD = process.env.APP_PASSWORD || '';
 // in your Mac or a synced folder on it, so those features are switched off and
 // the app is a library and reader. On whenever it listens publicly.
 const HOSTED = process.env.HOSTED === '1' || !LOOPBACK;
-if (!LOOPBACK && !APP_PASSWORD) {
+// Accounts: everyone signs in as themselves and has their own library. On
+// whenever the app is hosted with a database; on your own computer only when
+// asked (ACCOUNTS=1, with DATABASE_URL), to try them. Without accounts, a
+// hosted install is one shared library behind APP_PASSWORD.
+const ACCOUNTS = Boolean(process.env.DATABASE_URL) && (HOSTED || process.env.ACCOUNTS === '1');
+if (!LOOPBACK && !APP_PASSWORD && !ACCOUNTS) {
   console.error(
-    `\n  Refusing to listen on ${HOST} without a password. Set APP_PASSWORD, or leave\n` +
-      '  HOST unset to keep the app on this computer.\n'
+    `\n  Refusing to listen on ${HOST} without a password. Set DATABASE_URL for accounts,\n` +
+      '  or APP_PASSWORD for one shared password, or leave HOST unset to keep the app\n' +
+      '  on this computer.\n'
   );
   process.exit(1);
 }
@@ -100,6 +109,7 @@ if (!LOOPBACK && !APP_PASSWORD) {
 // than run with them.
 const secretIssues = secretProblems(process.env, {
   required: !LOOPBACK || process.env.NODE_ENV === 'production',
+  accounts: ACCOUNTS,
 });
 if (secretIssues.length) {
   console.error(
@@ -172,6 +182,79 @@ const STATE_DIR = process.env.EPUB_DROP_STATE || ROOT;
 
 const backend = await openBackend();
 const DEFAULT_OWNER = HOSTED ? SHARED_OWNER : LOCAL_OWNER;
+
+// ---------------------------------------------------------------- accounts
+//
+// See lib/accounts. The first admin comes from ADMIN_USERNAME and
+// ADMIN_PASSWORD (and ADMIN_EMAIL, optionally) on the first start with no
+// admin; those variables do nothing after that. That admin's library is the
+// one the install had before accounts ("shared"), so nothing is lost.
+
+const accounts = ACCOUNTS ? new AccountStore(backend.db) : null;
+let LOOKUP_KEY = null;
+if (accounts) {
+  LOOKUP_KEY = lookupKey();
+  if (!(await accounts.count({ role: 'admin' }))) {
+    const username = String(process.env.ADMIN_USERNAME || '').trim();
+    const password = process.env.ADMIN_PASSWORD || '';
+    if (!username || !password) {
+      console.error(
+        '\n  Accounts are on, and there is no admin yet. Set ADMIN_USERNAME and ADMIN_PASSWORD\n' +
+          '  (and ADMIN_EMAIL, if you like) in the host\'s environment settings to create the\n' +
+          '  first one; they are used once, on this start, and never again.\n'
+      );
+      process.exit(1);
+    }
+    const sharedTaken = (await accounts.list()).some((u) => u.library === SHARED_OWNER);
+    const admin = await accounts.create({
+      username,
+      email: process.env.ADMIN_EMAIL || '',
+      role: 'admin',
+      passwordHash: await hashPassword(password),
+      library: sharedTaken ? undefined : SHARED_OWNER,
+    });
+    console.log(`  accounts: created the first admin, "${admin.username}".`);
+  }
+  setInterval(() => accounts.pruneSessions().catch(() => {}), 6 * 60 * 60 * 1000).unref();
+}
+
+// The session cookie. Over HTTPS it gets the __Host- prefix, which browsers
+// only accept when it is Secure, for this exact host and the whole site.
+const COOKIE_PLAIN = 'apub_session';
+const COOKIE_SECURE = '__Host-apub_session';
+const loginFailures = new RateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+
+function readCookie(req, name) {
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const at = part.indexOf('=');
+    if (at > 0 && part.slice(0, at).trim() === name) return decodeURIComponent(part.slice(at + 1).trim());
+  }
+  return '';
+}
+
+const sessionToken = (req) => readCookie(req, COOKIE_SECURE) || readCookie(req, COOKIE_PLAIN);
+
+function sessionCookie(req, token) {
+  const name = req.secure ? COOKIE_SECURE : COOKIE_PLAIN;
+  const life = token ? `Max-Age=${SESSION_DAYS * 24 * 60 * 60}` : 'Max-Age=0';
+  return `${name}=${token ? encodeURIComponent(token) : ''}; Path=/; HttpOnly; SameSite=Lax; ${life}${req.secure ? '; Secure' : ''}`;
+}
+
+/** Pages and calls open to someone not signed in (when accounts are on). */
+const PUBLIC_PATHS = new Set([
+  'GET /signin',
+  'GET /signin.js',
+  'GET /style.css',
+  'GET /themes.css',
+  'GET /theme.js',
+  'GET /logo.svg',
+  'GET /api/auth/me',
+  'POST /api/auth/signin',
+]);
+
+/** A user as their own page and the admin page see them. */
+const userView = (user) =>
+  user && { id: user.id, username: user.username, email: user.email, role: user.role, adminSetPassword: user.adminSetPassword };
 const ownerContext = new AsyncLocalStorage();
 /** The current owner's stores. */
 const stores = () => backend.forOwner(ownerContext.getStore() || DEFAULT_OWNER);
@@ -230,7 +313,7 @@ async function openBackend() {
   const url = process.env.DATABASE_URL;
   if (!url) return fileBackend({ outDir: OUT_DIR, stateDir: STATE_DIR, configPath: CONFIG_PATH });
 
-  const db = openPostgres(url, { ssl: process.env.DATABASE_SSL ? process.env.DATABASE_SSL !== '0' : undefined });
+  const db = await openDatabase(url, { ssl: process.env.DATABASE_SSL ? process.env.DATABASE_SSL !== '0' : undefined });
   const applied = await migrate(db);
   if (applied.length) console.log(`  database: applied ${applied.join(', ')}`);
 
@@ -779,7 +862,198 @@ async function refreshFeed(feed) {
 
 // ---------------------------------------------------------------- routes
 
+const ADMIN_DIR = path.join(ROOT, 'admin');
+
+/** A page or script from disk, as a route result. */
+async function fileResult(file, type) {
+  return { status: 200, type, payload: await fs.readFile(file) };
+}
+
+const redirect = (location) => ({ status: 302, type: 'text/plain', payload: '', headers: { location } });
+
+/** Only a path on this site, so ?next= cannot send someone elsewhere after signing in. */
+const safeNext = (value) => (/^\/(?!\/)[^\\]*$/.test(String(value || '')) ? String(value) : '/');
+
+/** Is this the last active admin? Then they may not be removed, demoted or switched off. */
+async function lastAdmin(user) {
+  return user.role === 'admin' && user.status !== 'disabled' && (await accounts.count({ role: 'admin' })) <= 1;
+}
+
+/** The user an admin call is about, or a 404. */
+async function targetUser(id) {
+  const user = await accounts.get(id);
+  if (!user) throw httpError(404, 'That account no longer exists.');
+  return user;
+}
+
+/** A password for an admin to set: the one typed, checked, or a readable new one. */
+function adminPassword(typed, user) {
+  if (typed) {
+    const problem = passwordProblem(typed, user);
+    if (problem) throw httpError(400, problem);
+    return typed;
+  }
+  return readablePassword();
+}
+
 const routes = {
+  // ---- signing in and out (accounts)
+
+  'GET /signin': async (req, url) => {
+    if (!accounts) return redirect('/');
+    if (req.user) return redirect(safeNext(url.searchParams.get('next')));
+    return fileResult(path.join(PUBLIC_DIR, 'signin.html'), MIME['.html']);
+  },
+
+  'POST /api/auth/signin': async (req) => {
+    if (!accounts) throw httpError(404, 'Accounts are not switched on here.');
+    const ip = clientIp(req, TRUST_PROXY_HOPS);
+    const { login = '', password = '' } = await body(req);
+    const who = String(login).trim().toLowerCase().slice(0, 254);
+    const limited = [loginFailures.blocked(`ip:${ip}`), loginFailures.blocked(`login:${who}`)].find((l) => l.blocked);
+    if (limited) {
+      return { ...json(429, { error: 'Too many tries. Wait a few minutes and try again.' }), headers: { 'retry-after': String(limited.retryAfter) } };
+    }
+    const found = await accounts.credentials(who);
+    // Checked even when there is no such account, so both take as long.
+    const ok = await verifyPassword(String(password), found?.hash);
+    if (!found || !ok) {
+      loginFailures.hit(`ip:${ip}`);
+      if (who) loginFailures.hit(`login:${who}`);
+      return json(401, { error: 'That username or password is not right.' });
+    }
+    if (found.user.status === 'disabled') return json(403, { error: 'This account is switched off. Ask an administrator.' });
+    if (found.user.status === 'pending') return json(403, { error: 'This account is waiting for an administrator to approve it.' });
+
+    // A fresh session at every sign-in; any earlier one in this browser ends.
+    await accounts.deleteSession(sessionToken(req)).catch(() => {});
+    const token = await accounts.createSession(found.user.id, { userAgent: req.headers['user-agent'], ip });
+    await accounts.recordSignIn(found.user.id);
+    return { ...json(200, { ok: true, user: userView(found.user) }), headers: { 'set-cookie': sessionCookie(req, token) } };
+  },
+
+  'POST /api/auth/signout': async (req) => {
+    if (accounts) await accounts.deleteSession(sessionToken(req)).catch(() => {});
+    return { ...json(200, { ok: true }), headers: { 'set-cookie': sessionCookie(req, '') } };
+  },
+
+  'POST /api/auth/signout-everywhere': async (req) => {
+    if (!req.user) throw httpError(401, 'Sign in first.');
+    const count = await accounts.deleteUserSessions(req.user.id);
+    return { ...json(200, { ok: true, count }), headers: { 'set-cookie': sessionCookie(req, '') } };
+  },
+
+  'GET /api/auth/me': async (req) =>
+    json(200, {
+      accounts: Boolean(accounts),
+      user: userView(req.user || null),
+      sessions: req.user ? await accounts.countSessions(req.user.id) : 0,
+    }),
+
+  'POST /api/auth/password': async (req) => {
+    if (!req.user) throw httpError(401, 'Sign in first.');
+    const { current = '', next = '' } = await body(req);
+    const found = await accounts.credentialsById(req.user.id);
+    if (!(await verifyPassword(String(current), found?.hash))) throw httpError(400, 'Your current password is not right.');
+    const problem = passwordProblem(String(next), req.user);
+    if (problem) throw httpError(400, problem);
+    // A password the user chose: only its hash is kept, and any admin-kept copy goes.
+    await accounts.setPassword(req.user.id, await hashPassword(String(next)));
+    // Other browsers signed in with the old password are signed out.
+    const signedOut = await accounts.deleteUserSessions(req.user.id, { keep: req.sessionId });
+    return json(200, { ok: true, signedOut });
+  },
+
+  'GET /account': async () => {
+    if (!accounts) return redirect('/');
+    return fileResult(path.join(PUBLIC_DIR, 'account.html'), MIME['.html']);
+  },
+
+  // ---- the admin area (role checked before any of these run)
+
+  'GET /admin': async () => fileResult(path.join(ADMIN_DIR, 'admin.html'), MIME['.html']),
+  'GET /admin/admin.js': async () => fileResult(path.join(ADMIN_DIR, 'admin.js'), MIME['.js']),
+
+  'GET /api/admin/users': async (req) =>
+    json(200, { users: await accounts.list(), me: req.user.id, lookup: Boolean(LOOKUP_KEY) }),
+
+  'POST /api/admin/users': async (req) => {
+    const { username = '', email = '', role = 'user', password = '' } = await body(req);
+    const chosen = adminPassword(String(password), { username, email });
+    const user = await accounts.create({
+      username,
+      email,
+      role,
+      passwordHash: await hashPassword(chosen),
+      adminSet: true,
+      sealed: LOOKUP_KEY ? sealPassword(LOOKUP_KEY, chosen) : null,
+      createdBy: req.user.id,
+    });
+    // The password is shown once, here; afterwards only lookup (if on) can show it.
+    return json(200, { user, password: chosen });
+  },
+
+  'POST /api/admin/users/update': async (req) => {
+    const { id, role, status, email } = await body(req);
+    const user = await targetUser(id);
+    if (user.id === req.user.id && (role !== undefined || status !== undefined)) {
+      throw httpError(400, 'You cannot change your own role or switch yourself off.');
+    }
+    if ((role === 'user' || status === 'disabled') && (await lastAdmin(user))) {
+      throw httpError(400, 'This is the only administrator. Make someone else an administrator first.');
+    }
+    const updated = await accounts.update(user.id, { role, status, email });
+    if (status === 'disabled') await accounts.deleteUserSessions(user.id);
+    return json(200, { user: updated });
+  },
+
+  'POST /api/admin/users/reset': async (req) => {
+    const { id, password = '' } = await body(req);
+    const user = await targetUser(id);
+    const chosen = adminPassword(String(password), user);
+    await accounts.setPassword(user.id, await hashPassword(chosen), {
+      adminSet: true,
+      sealed: LOOKUP_KEY ? sealPassword(LOOKUP_KEY, chosen) : null,
+    });
+    // Signed out everywhere: the old password no longer gets anyone in.
+    await accounts.deleteUserSessions(user.id);
+    return json(200, { user: await accounts.get(user.id), password: chosen });
+  },
+
+  'POST /api/admin/users/lookup': async (req) => {
+    const { id } = await body(req);
+    await targetUser(id);
+    if (!LOOKUP_KEY) throw httpError(400, 'Password lookup is off: PASSWORD_LOOKUP_KEY is not set.');
+    const found = await accounts.credentialsById(id);
+    if (!found.sealed) {
+      return json(200, {
+        password: null,
+        reason: found.user.adminSetPassword ? 'This password was set before lookup was switched on.' : 'This person chose their own password, which no one can look up.',
+      });
+    }
+    const password = openPassword(LOOKUP_KEY, found.sealed);
+    return json(200, password ? { password } : { password: null, reason: 'It could not be decrypted; the lookup key may have changed.' });
+  },
+
+  'POST /api/admin/users/signout': async (req) => {
+    const { id } = await body(req);
+    const user = await targetUser(id);
+    return json(200, { ok: true, count: await accounts.deleteUserSessions(user.id) });
+  },
+
+  'POST /api/admin/users/delete': async (req) => {
+    const { id, confirm = '' } = await body(req);
+    const user = await targetUser(id);
+    if (user.id === req.user.id) throw httpError(400, 'You cannot delete your own account.');
+    if (await lastAdmin(user)) throw httpError(400, 'This is the only administrator.');
+    if (String(confirm).trim().toLowerCase() !== user.username.toLowerCase()) {
+      throw httpError(400, `Type the username, ${user.username}, to confirm.`);
+    }
+    const library = await accounts.delete(user.id);
+    if (library) await backend.deleteOwner(library);
+    return json(200, { ok: true });
+  },
+
   // `hosted` tells the page which features exist; it is not a saved setting.
   'GET /api/config': async () => json(200, { ...(await readConfig()), hosted: HOSTED }),
 
@@ -1566,12 +1840,13 @@ async function moveDocumentsOnce() {
   }
 }
 
+/** Whose library a request works on: the signed-in user's, or the one library. */
 function ownerFor(req) {
-  return DEFAULT_OWNER;
+  return req.user?.library || DEFAULT_OWNER;
 }
 
 function handle(req, res) {
-  return ownerContext.run(ownerFor(req), () => handleRequest(req, res));
+  return handleRequest(req, res);
 }
 
 async function handleRequest(req, res) {
@@ -1592,22 +1867,57 @@ async function handleRequest(req, res) {
   // For the host's health checks, which come without the password.
   if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, 'text/plain', 'ok');
 
-  await moveDocumentsOnce();
+  req.secure = https || (HOSTED && !LOOPBACK);
 
-  if (APP_PASSWORD && authFailures.blocked(ip).blocked) {
-    res.setHeader('retry-after', String(authFailures.blocked(ip).retryAfter));
-    return send(res, 429, 'text/plain', 'Too many wrong passwords. Try again in a few minutes.');
+  if (accounts) {
+    // Signed in? Everything but the sign-in page and its files needs it.
+    const signedIn = await accounts.sessionUser(sessionToken(req)).catch(() => null);
+    if (signedIn?.user.status === 'active') {
+      req.user = signedIn.user;
+      req.sessionId = signedIn.sessionId;
+    }
+    if (!req.user && !PUBLIC_PATHS.has(key)) {
+      if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+        const next = url.pathname === '/' ? '' : `?next=${encodeURIComponent(url.pathname + url.search)}`;
+        res.writeHead(302, { location: `/signin${next}`, 'cache-control': 'no-store' });
+        return res.end();
+      }
+      return send(res, 401, 'application/json', JSON.stringify({ error: 'Sign in first.', signin: true }));
+    }
+    // The admin area: its pages are served only after this check, never from public/.
+    if ((url.pathname === '/admin' || url.pathname.startsWith('/admin/') || url.pathname.startsWith('/api/admin/')) && req.user?.role !== 'admin') {
+      return send(res, 403, url.pathname.startsWith('/api/') ? 'application/json' : 'text/plain',
+        url.pathname.startsWith('/api/') ? JSON.stringify({ error: 'Only administrators can do that.' }) : 'Only administrators can open this page.');
+    }
+  } else if (APP_PASSWORD) {
+    if (authFailures.blocked(ip).blocked) {
+      res.setHeader('retry-after', String(authFailures.blocked(ip).retryAfter));
+      return send(res, 429, 'text/plain', 'Too many wrong passwords. Try again in a few minutes.');
+    }
+    if (!authorized(req)) {
+      // A first visit asks without credentials; only a wrong password counts.
+      if (req.headers.authorization) authFailures.hit(ip);
+      res.writeHead(401, {
+        'www-authenticate': 'Basic realm="A-Pub Reader", charset="UTF-8"',
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+      });
+      return res.end('A-Pub Reader needs its password.');
+    }
   }
-  if (APP_PASSWORD && !authorized(req)) {
-    // A first visit asks without credentials; only a wrong password counts.
-    if (req.headers.authorization) authFailures.hit(ip);
-    res.writeHead(401, {
-      'www-authenticate': 'Basic realm="A-Pub Reader", charset="UTF-8"',
-      'content-type': 'text/plain; charset=utf-8',
-      'cache-control': 'no-store',
-    });
-    return res.end('A-Pub Reader needs its password.');
+
+  // Without accounts there is no admin area and no account to manage.
+  if (!accounts && (url.pathname === '/admin' || url.pathname.startsWith('/admin/') || url.pathname.startsWith('/api/admin/') ||
+      ['POST /api/auth/password', 'POST /api/auth/signout-everywhere'].includes(key))) {
+    return send(res, 404, 'text/plain', 'Not found');
   }
+
+  // From here on, the request works on one library: the signed-in user's.
+  return ownerContext.run(ownerFor(req), () => routeRequest(req, res, url, key, ip));
+}
+
+async function routeRequest(req, res, url, key, ip) {
+  await moveDocumentsOnce();
 
   // Anything that changes something must come from the app's own pages, not
   // from another site the browser happens to have open.
@@ -1734,7 +2044,8 @@ async function handleRequest(req, res) {
   const route = routes[key];
   if (route) {
     try {
-      const { status, type, payload } = await route(req, url);
+      const { status, type, payload, headers } = await route(req, url);
+      for (const [name, value] of Object.entries(headers || {})) res.setHeader(name, value);
       return send(res, status, type, payload);
     } catch (err) {
       return send(res, err.status || 500, 'application/json', JSON.stringify({ error: err.message }));
@@ -1903,7 +2214,7 @@ server.listen(PORT, HOST, async () => {
   const config = await readConfig();
   if (HOSTED) {
     console.log(`\n  A-Pub Reader (hosted)  →  listening on ${HOST}:${PORT}`);
-    console.log(`  password: ${APP_PASSWORD ? 'required' : 'off'}   device features: off\n`);
+    console.log(`  sign-in: ${accounts ? 'accounts' : APP_PASSWORD ? 'shared password' : 'off'}   device features: off\n`);
     return;
   }
   console.log(`\n  A-Pub Reader  →  http://localhost:${PORT}`);

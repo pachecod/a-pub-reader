@@ -310,7 +310,10 @@ if (process.env.TEST_DATABASE_URL) {
       ...process.env,
       PORT: String(PORT),
       HOSTED: '1',
-      APP_PASSWORD: PASSWORD,
+      // With a database, hosted means accounts: the first admin signs in.
+      APP_PASSWORD: '',
+      ADMIN_USERNAME: 'pgadmin',
+      ADMIN_PASSWORD: PASSWORD,
       DATABASE_URL: process.env.TEST_DATABASE_URL,
       EPUB_DROP_STATE: path.join(sandbox, 'server-state'),
       EPUB_DROP_OUT_DIR: path.join(sandbox, 'server-out'),
@@ -322,12 +325,15 @@ if (process.env.TEST_DATABASE_URL) {
   app.stdout.on('data', (d) => log.push(String(d)));
   app.stderr.on('data', (d) => log.push(String(d)));
   const base = `http://127.0.0.1:${PORT}`;
-  const headers = { authorization: `Basic ${Buffer.from(`r:${PASSWORD}`).toString('base64')}`, 'content-type': 'application/json' };
+  const headers = { 'content-type': 'application/json' };
   try {
     for (let i = 0; i < 100; i++) {
       if (await fetch(`${base}/healthz`).then((r) => r.ok, () => false)) break;
       await new Promise((r) => setTimeout(r, 100));
     }
+    const signIn = await fetch(`${base}/api/auth/signin`, { method: 'POST', headers, body: JSON.stringify({ login: 'pgadmin', password: PASSWORD }) });
+    assert(signIn.ok, 'the first admin signs in on PostgreSQL');
+    headers.cookie = String(signIn.headers.get('set-cookie') || '').split(';')[0];
     const paragraph = 'A sentence long enough for Readability to treat the element as the body of the article, repeated. ';
     const converted = await (
       await fetch(`${base}/api/convert`, {
