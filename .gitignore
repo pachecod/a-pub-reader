@@ -16,3 +16,8 @@ examples/
 data/
 .env
 .env.*
+
+# Library data the 2.0 storage layer writes on this computer.
+usage.json
+files/
+users/
