@@ -276,6 +276,9 @@ try {
   const queueColumnTag = home.slice(queueColumnStart, home.indexOf('>', queueColumnStart) + 1);
   assert(!/device-only/.test(queueColumnTag) && /id="results-section" class="device-only"/.test(home), 'when hosted, the waiting files and Convert stay visible; only syncing is hidden');
   assert(/id="site-dialog"[\s\S]*Article not fetched from feed yet[\s\S]*id="site-cancel"[\s\S]*id="site-ok"/.test(home), 'opening a not-yet-fetched article asks first');
+  const agreeJs = await (await fetch(`http://127.0.0.1:${APP_PORT}/agree.js`)).text();
+  assert(/<script src="\/agree\.js" defer><\/script>/.test(home) && /<script src="\/agree\.js" defer><\/script>/.test(webHtml), 'the app and every reading page ask for agreement before a download');
+  assert(agreeJs.includes('I agree to use this ePub file solely for my personal, non-commercial use.') && /\\\/out\\\/\[0-9a-f-\]\{36\}\$/.test(agreeJs) && /ebooks\\\.zip/.test(agreeJs), 'with that wording, for a single eBook and for the whole library');
   assert(/id="type-turn"[\s\S]*value="curl"[\s\S]*value="swing"[\s\S]*value="none"/.test(home), 'the eBook view offers corner curl, swing or no page turn');
   const themeCss = await (await fetch(`http://127.0.0.1:${APP_PORT}/themes.css`)).text();
   const themeJs = await (await fetch(`http://127.0.0.1:${APP_PORT}/theme.js`)).text();
@@ -514,13 +517,23 @@ try {
     { title: 'First story from the stand-in feed', date: new Date(Date.now() - 3600e3) },
     { title: 'Second story from the stand-in feed', date: new Date(Date.now() - 1800e3) },
   ];
+  const { createCanvas } = await import('@napi-rs/canvas');
+  const pictureCanvas = createCanvas(400, 300);
+  const pictureCtx = pictureCanvas.getContext('2d');
+  pictureCtx.fillStyle = '#3366aa';
+  pictureCtx.fillRect(0, 0, 400, 300);
+  const picturePng = pictureCanvas.toBuffer('image/png');
   const rss = () =>
-    `<?xml version="1.0"?><rss version="2.0"><channel><title>Stand-in Feed</title><link>http://127.0.0.1/</link>` +
+    `<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>Stand-in Feed</title><link>http://127.0.0.1/</link>` +
     feedItems
-      .map((i) => `<item><title>${i.title}</title><link>http://127.0.0.1/${encodeURIComponent(i.title)}</link><pubDate>${i.date.toUTCString()}</pubDate><description>&lt;p&gt;${paragraph.repeat(2)}&lt;/p&gt;</description></item>`)
+      .map((i, n) => `<item><title>${i.title}</title><link>http://127.0.0.1/${encodeURIComponent(i.title)}</link><pubDate>${i.date.toUTCString()}</pubDate>${n === 0 ? `<media:content url="http://127.0.0.1:${feedServer.address().port}/picture.png" medium="image" width="400"/>` : ''}<description>&lt;p&gt;${paragraph.repeat(2)}&lt;/p&gt;</description></item>`)
       .join('') +
     `</channel></rss>`;
   const feedServer = http.createServer((req, res) => {
+    if (req.url === '/picture.png') {
+      res.writeHead(200, { 'content-type': 'image/png' });
+      return res.end(picturePng);
+    }
     res.writeHead(200, { 'content-type': 'application/rss+xml' });
     res.end(rss());
   });
@@ -532,7 +545,17 @@ try {
     const notBuilt = (await api('/api/feeds/check')).body.feeds.find((f) => f.feedId === standIn.id);
     assert(notBuilt?.newCount === 2 && notBuilt.hasEdition === false, `before any refresh, all its articles are new: ${notBuilt?.newCount}`);
 
-    await api('/api/feeds/refresh', { method: 'POST', body: JSON.stringify({ id: standIn.id }) });
+    const refreshed = await api('/api/feeds/refresh', { method: 'POST', body: JSON.stringify({ id: standIn.id }) });
+    assert(refreshed.body.results[0].steps.some((step) => /Kept 1 picture/.test(step)), 'a refresh keeps the pictures the feed gives, for the web view');
+    const edition = (await api('/api/reading')).body.items.find((i) => i.feedId === standIn.id);
+    const pictured = edition?.articles?.find((a) => a.image);
+    assert(pictured && /^\/out\/[0-9a-f-]{36}\/image\/\d+\.jpg$/.test(pictured.image), 'the Library gets the article’s picture, served by the app');
+    assert(edition.articles.filter((a) => a.image).length === 1, 'only articles with a picture have one');
+    const pictureRes = await fetch(`http://127.0.0.1:${APP_PORT}${pictured.image}`);
+    const pictureBytes = Buffer.from(await pictureRes.arrayBuffer());
+    assert(pictureRes.ok && pictureRes.headers.get('content-type') === 'image/jpeg' && pictureBytes[0] === 0xff && pictureBytes[1] === 0xd8, 'and serves it as a JPEG');
+    const readHtml = await (await fetch(`http://127.0.0.1:${APP_PORT}/read/${edition.id}`)).text();
+    assert(readHtml.includes(`<figure class="lead-image"><img src="${pictured.image}"`), 'the reading page shows it inline in the article');
     const fresh = (await api('/api/feeds/check')).body.feeds.find((f) => f.feedId === standIn.id);
     assert(fresh?.newCount === 0, `right after a refresh, nothing is new: ${fresh?.newCount}`);
 

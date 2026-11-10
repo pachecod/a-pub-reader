@@ -870,6 +870,46 @@ async function refreshTargets(targets, { manual = false } = {}) {
  * deliver is not a failure to refresh — the EPUB is still built and downloadable,
  * so a refresh done away from the reader isn't wasted.
  */
+// ---- pictures for a feed edition's articles (the web view's thumbnails)
+//
+// The picture each item names in the feed is downloaded once, while the
+// edition is built, made into a JPEG of at most 960 px, and kept with the
+// edition; the app serves it from there, so the publisher's server is not
+// asked again each time someone looks, and does not see who reads what. The
+// EPUB for the reader stays text-only.
+const IMAGE_BYTES = 8 * 1024 * 1024;
+const IMAGE_TIME_MS = 12000;
+const IMAGES_BUDGET_MS = 45000;
+
+async function fetchArticleImages(items) {
+  const found = new Map();
+  const started = Date.now();
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      const address = items[index].image;
+      if (!address || Date.now() - started > IMAGES_BUDGET_MS) continue;
+      try {
+        if (await optedOut(address)) continue;
+        const res = await safeFetch(address, {
+          signal: AbortSignal.timeout(IMAGE_TIME_MS),
+          maxBytes: IMAGE_BYTES,
+          redirect: 'follow',
+          headers: { 'user-agent': userAgent(), accept: 'image/avif,image/webp,image/jpeg,image/png,image/*;q=0.8' },
+        });
+        if (!res.ok || !/^image\//i.test(res.headers.get('content-type') || '')) continue;
+        const picture = await normalizeForDevice(Buffer.from(await res.arrayBuffer()), { maxWidth: 960, maxHeight: 960 });
+        if (picture?.data?.length) found.set(index + 1, picture.data);
+      } catch {
+        /* no picture for this one */
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, items.length) }, worker));
+  return found;
+}
+
 async function refreshFeed(feed) {
   const steps = [];
   const fetched = await fetchFeedShared(feed.url);
@@ -912,6 +952,10 @@ async function refreshFeed(feed) {
 
   const id = randomUUID();
   const stored = await outbox.saveEpub(id, filename, built.buffer);
+  // Each article's picture from the feed, for the web view (not the EPUB).
+  const pictures = await fetchArticleImages(items);
+  const imageFields = pictures.size ? await outbox.saveImages(id, pictures) : {};
+  if (pictures.size) steps.push(`Kept ${pictures.size} picture${pictures.size === 1 ? '' : 's'} for the web view`);
 
   // A feed switched off in the Library stays off: its new edition inherits the
   // switch from the newest one before it.
@@ -940,6 +984,7 @@ async function refreshFeed(feed) {
     replaces: feed.lastFilename || null,
     source: { kind: 'feed', label: title, feedId: feed.id, items: items.length, site },
     onReader,
+    ...imageFields,
   });
 
   // Summarize it now, while its bytes are in hand, so the Library shows it
@@ -1311,6 +1356,11 @@ const routes = {
     const followed = new Map((await feeds.list()).map((f) => [f.id, f]));
     const withSite = (summary, item) => {
       if (summary.kind !== 'feed') return summary;
+      // Each article's picture, where the edition kept one.
+      const pictured = new Set(item.images?.numbers || []);
+      if (pictured.size) {
+        summary = { ...summary, articles: summary.articles.map((a) => (pictured.has(a.n) ? { ...a, image: `/out/${item.id}/image/${a.n}.jpg` } : a)) };
+      }
       const site = [item.source?.site, followed.get(item.source?.feedId)?.site, siteOf({ items: [{ link: summary.firstLink }] })]
         .find((s) => siteLabel(s));
       return site ? { ...summary, site, siteLabel: siteLabel(site) } : summary;
@@ -2365,6 +2415,16 @@ async function routeRequest(req, res, url, key, ip) {
     } catch (err) {
       return send(res, 500, 'text/plain', `Could not read that EPUB: ${err.message}`);
     }
+  }
+
+  // An article's picture in a feed edition: /out/<id>/image/<n>.jpg
+  const imageMatch = /^\/out\/([0-9a-f-]{36})\/image\/(\d+)\.jpg$/i.exec(url.pathname);
+  if (req.method === 'GET' && imageMatch) {
+    const entry = await outbox.get(imageMatch[1]);
+    const data = entry ? await outbox.readImage(entry, imageMatch[2]).catch(() => null) : null;
+    if (!data) return send(res, 404, 'text/plain', 'Not found');
+    res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': data.length, 'cache-control': 'private, max-age=31536000, immutable' });
+    return res.end(data);
   }
 
   // Rendered page images, for the fixed-layout preview: /out/<id>/pages/<n>.png

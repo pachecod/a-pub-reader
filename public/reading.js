@@ -67,9 +67,25 @@
     item.articles.forEach((article, i) => {
       const li = node('li', 'reading-article');
       if (!showAll && i >= FIRST_ARTICLES) li.hidden = true;
-      li.appendChild(link(readUrl(item.id, article.n), 'reading-article-title', article.title));
-      if (article.byline) li.appendChild(node('p', 'reading-byline', article.byline));
-      if (article.excerpt) li.appendChild(node('p', 'reading-excerpt', article.excerpt));
+      // The article's picture from the feed, styled like a book's cover.
+      if (article.image) {
+        li.classList.add('has-thumb');
+        const thumbLink = link(readUrl(item.id, article.n), 'reading-thumb-link');
+        thumbLink.setAttribute('aria-hidden', 'true');
+        thumbLink.tabIndex = -1;
+        const thumb = node('img', 'reading-thumb');
+        thumb.src = article.image;
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+        thumb.decoding = 'async';
+        thumbLink.appendChild(thumb);
+        li.appendChild(thumbLink);
+      }
+      const body = node('div', 'reading-article-body');
+      body.appendChild(link(readUrl(item.id, article.n), 'reading-article-title', article.title));
+      if (article.byline) body.appendChild(node('p', 'reading-byline', article.byline));
+      if (article.excerpt) body.appendChild(node('p', 'reading-excerpt', article.excerpt));
+      li.appendChild(body);
       list.appendChild(li);
     });
     block.appendChild(list);

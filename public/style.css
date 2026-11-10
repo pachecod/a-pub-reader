@@ -1593,3 +1593,18 @@ h2, .column-title { color: var(--text); }
 .reader-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--line-strong); flex: none; align-self: center; }
 .reader-dot.is-ok { background: var(--ok); }
 .reader-dot.is-bad { background: var(--bad); }
+
+/* An article's picture in the Library, in the style of a book's cover. */
+.reading-article.has-thumb { display: flex; gap: 0.85rem; align-items: flex-start; }
+.reading-article-body { min-width: 0; flex: 1; }
+.reading-thumb-link { flex: none; margin-top: 0.15rem; }
+.reading-thumb {
+  display: block;
+  width: 84px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--panel-2);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.25);
+}
+@media (max-width: 480px) { .reading-thumb { width: 68px; } }

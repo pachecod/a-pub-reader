@@ -125,6 +125,23 @@ try {
   server.close();
 }
 
+console.log('\n== pictures from the feed ==');
+{
+  const feed = parseFeed(`<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>T</title>
+    <item><title>Media content</title><link>https://news.example/a</link><media:content url="https://img.example/small.jpg" medium="image" width="240"/><media:content url="https://img.example/big.jpg" medium="image" width="1200"/><media:content url="https://video.example/clip.mp4" type="video/mp4"/></item>
+    <item><title>Thumbnail in a group</title><link>https://news.example/b</link><media:group><media:thumbnail url="/thumbs/b.jpg" width="320"/></media:group></item>
+    <item><title>Enclosure</title><link>https://news.example/c</link><enclosure url="https://img.example/c.png" type="image/png" length="1"/></item>
+    <item><title>In the text</title><link>https://news.example/d</link><description><![CDATA[<img src="https://track.example/p.gif" width="1" height="1"><p>Hi</p><img src="https://img.example/d.jpg" width="600">]]></description></item>
+    <item><title>None</title><link>https://news.example/e</link><description>Just words.</description></item>
+  </channel></rss>`);
+  const images = feed.items.map((i) => i.image);
+  assert(images[0] === 'https://img.example/big.jpg', 'media:content: the largest picture, never a video');
+  assert(images[1] === 'https://news.example/thumbs/b.jpg', 'media:thumbnail inside a group, made absolute');
+  assert(images[2] === 'https://img.example/c.png', 'an image enclosure');
+  assert(images[3] === 'https://img.example/d.jpg', 'otherwise the first real picture in the text, skipping tracking pixels');
+  assert(images[4] === '', 'and nothing when the feed gives none');
+}
+
 console.log('\n== XML entity tricks ==');
 const xxe = `<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><rss><channel><title>&x;</title></channel></rss>`;
 const laughs = `<?xml version="1.0"?><!DOCTYPE r [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;"><!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">]><rss><channel><title>&c;</title></channel></rss>`;
