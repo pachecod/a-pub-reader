@@ -19,6 +19,11 @@
   const el = {
     books: $('read-books'),
     booksCount: $('read-books-count'),
+    docs: $('read-docs'),
+    docsCount: $('read-docs-count'),
+    docsEmpty: $('read-docs-empty'),
+    docsMore: $('read-docs-more'),
+    docsSection: $('read-docs-section'),
     booksEmpty: $('read-books-empty'),
     notes: $('read-notes'),
     notesCount: $('read-notes-count'),
@@ -195,13 +200,19 @@
         return true;
       });
       const notes = items.filter((i) => i.source?.kind === 'draft');
-      const books = items.filter((i) => !['feed', 'draft'].includes(i.source?.kind));
+      // Books come from Find books; documents are what you converted yourself.
+      const books = items.filter((i) => i.source?.kind === 'book');
+      const docs = items.filter((i) => !['feed', 'draft', 'book'].includes(i.source?.kind));
 
-      // With nothing built at all, three small "nothing here" notes are useless.
+      // With nothing built at all, the small "nothing here" notes are useless.
       // Replace the lists with one panel that says how to get content instead.
-      const nothingYet = books.length === 0 && feeds.length === 0 && notes.length === 0;
+      const nothingYet = books.length === 0 && docs.length === 0 && feeds.length === 0 && notes.length === 0;
       el.onboarding.hidden = !nothingYet;
       el.booksSection.hidden = nothingYet;
+      el.docsSection.hidden = nothingYet;
+      el.docsCount.textContent = docs.length ? `· ${docs.length}` : '';
+      el.docsEmpty.hidden = docs.length > 0;
+      el.docsMore.hidden = docs.length === 0;
       el.notesSection.hidden = nothingYet;
       el.feedsSection.hidden = nothingYet;
 
@@ -222,12 +233,13 @@
       el.summary.textContent = nothingYet ? '' : window.epubDropReading?.summaryLine(reading.items) || '';
       // Every eBook in one zip, in the same folders they use on the reader.
       el.download.hidden = nothingYet;
-      const sideEmpty = !nothingYet && !books.length && !notes.length;
+      const sideEmpty = !nothingYet && !books.length && !docs.length && !notes.length;
       el.side.hidden = sideEmpty;
       el.layout.classList.toggle('read-wide', sideEmpty);
       el.addLinks.hidden = !sideEmpty;
 
       el.books.replaceChildren(...books.map(draw));
+      el.docs.replaceChildren(...docs.map(draw));
       el.notes.replaceChildren(...notes.map(draw));
       el.feeds.replaceChildren(...feeds.map(draw));
       showNewCounts();

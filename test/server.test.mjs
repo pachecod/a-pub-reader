@@ -270,6 +270,7 @@ try {
   assert(/href="\/themes\.css"/.test(webHtml) && /<script src="\/theme\.js"><\/script>/.test(webHtml) && /data-theme-choices/.test(webHtml), 'a reading page offers the color themes');
   const home = await (await fetch(`http://127.0.0.1:${APP_PORT}/`)).text();
   assert(/href="\/themes\.css"/.test(home) && /<script src="\/theme\.js"><\/script>/.test(home) && /data-theme-toggle/.test(home), 'the app has the color theme picker');
+  assert(/id="read-docs-section"[\s\S]*Documents[\s\S]*id="read-books-section"/.test(home), 'the Library keeps converted documents apart from books');
   // Hosted hides .device-only; the files waiting to convert must not be in it.
   const queueColumnStart = home.lastIndexOf('<div class="column', home.indexOf('id="queue-section"'));
   const queueColumnTag = home.slice(queueColumnStart, home.indexOf('>', queueColumnStart) + 1);

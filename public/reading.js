@@ -118,16 +118,18 @@
     return block;
   }
 
-  /** One line summing up the library: "200 articles from 16 feeds · 2 books". */
+  /** One line summing up the library: "200 articles from 16 feeds · 2 books · 1 document". */
   function summaryLine(items) {
     const feeds = items.filter((i) => i.kind === 'feed');
     const notes = items.filter((i) => i.kind === 'draft');
-    const books = items.length - feeds.length - notes.length;
+    const books = items.filter((i) => i.kind === 'book').length;
+    const docs = items.length - feeds.length - notes.length - books;
     const articles = feeds.reduce((n, f) => n + (f.articles?.length || 0), 0);
     const parts = [];
     if (articles) parts.push(`${plural(articles, 'article')} from ${plural(feeds.length, 'feed')}`);
     else if (feeds.length) parts.push(plural(feeds.length, 'feed edition'));
     if (books) parts.push(plural(books, 'book'));
+    if (docs) parts.push(plural(docs, 'document'));
     if (notes.length) parts.push(plural(notes.length, 'note'));
     return parts.join(' · ');
   }

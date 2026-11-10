@@ -137,7 +137,7 @@
           </div>
         </section>
       </div>
-      <aside class="read-side" id="read-side" aria-label="Notes and books">
+      <aside class="read-side" id="read-side" aria-label="Notes, documents and books">
         <section id="read-notes-section">
           <div class="row-between">
             <h2>Notes <span id="read-notes-count" class="muted"></span></h2>
@@ -154,6 +154,24 @@
           </div>
         </section>
 
+        <!-- What you converted yourself: PDFs, saved web pages, article links.
+             Books (below) are the ones downloaded from Find books. -->
+        <section id="read-docs-section">
+          <div class="row-between">
+            <h2>Documents <span id="read-docs-count" class="muted"></span></h2>
+          </div>
+          <ul id="read-docs" class="list shelf"></ul>
+          <p id="read-docs-more" class="shelf-more" hidden>
+            <button type="button" class="link" data-goto="add" data-focus="url-input">Add files or links</button>
+          </p>
+          <div id="read-docs-empty" class="muted empty-note">
+            <p>No documents yet. Drop in a PDF or a saved web page, or paste article links.</p>
+            <div class="empty-actions">
+              <button type="button" class="secondary" data-goto="add" data-focus="url-input">Add files or links</button>
+            </div>
+          </div>
+        </section>
+
         <section id="read-books-section">
           <div class="row-between">
             <h2>Books <span id="read-books-count" class="muted"></span></h2>
@@ -163,10 +181,9 @@
             <button type="button" class="link" data-goto="add" data-click="books-browse">Find more books</button>
           </p>
           <div id="read-books-empty" class="muted empty-note">
-            <p>No books yet. Get a free classic, or drop in a PDF, a saved web page or article links.</p>
+            <p>No books yet. Get a free classic from Find books.</p>
             <div class="empty-actions">
               <button type="button" class="secondary" data-goto="add" data-focus="books-browse">Find books</button>
-              <button type="button" class="secondary" data-goto="add" data-focus="url-input">Add files or links</button>
             </div>
           </div>
         </section>
