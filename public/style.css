@@ -94,7 +94,7 @@ body {
 .brand img { display: block; }
 .brand h1 { font-size: 1.05rem; margin: 0; letter-spacing: 0.01em; white-space: nowrap; }
 .menubar-spacer { flex: 1; }
-.menubar .pending-badge { align-self: center; }
+.menubar .pending-badge { align-self: center; white-space: nowrap; flex: none; }
 
 /* The color theme button in the menu bar, and the list it opens. */
 .theme-menu { position: relative; display: flex; align-items: center; }

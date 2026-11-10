@@ -30,6 +30,10 @@
     refresh: $('read-refresh'),
     onboarding: $('read-onboarding'),
     forgetDialog: $('forget-dialog'),
+    siteDialog: $('site-dialog'),
+    siteBody: $('site-body'),
+    siteCancel: $('site-cancel'),
+    siteOk: $('site-ok'),
     forgetBody: $('forget-body'),
     forgetCancel: $('forget-cancel'),
     forgetKeep: $('forget-keep'),
@@ -332,6 +336,24 @@
   const shortDate = (iso) =>
     iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
+  // Asking before leaving for a publisher's site.
+  let siteLink = '';
+  function askOpenSite(link) {
+    siteLink = link;
+    let host = '';
+    try {
+      host = new URL(link).hostname.replace(/^www\./, '');
+    } catch {}
+    el.siteBody.textContent = host ? `Open the news site (${host}) in a new tab?` : 'Open the news site in a new tab?';
+    el.siteDialog.showModal();
+    el.siteOk.focus();
+  }
+  el.siteCancel.addEventListener('click', () => el.siteDialog.close());
+  el.siteOk.addEventListener('click', () => {
+    el.siteDialog.close();
+    if (/^https?:\/\//i.test(siteLink)) window.open(siteLink, '_blank', 'noopener,noreferrer');
+  });
+
   /** The not-yet-fetched articles at the top of a feed's box. */
   function newList(articles) {
     const list = document.createElement('ol');
@@ -344,10 +366,16 @@
       title.className = 'reading-article-title';
       title.textContent = article.title;
       if (article.link) {
-        // Not in an edition yet, so it opens on the publisher's site.
+        // Not in an edition yet, so it opens on the publisher's site, after
+        // asking. Cmd/Ctrl-click and middle-click still open it straight away.
         title.href = article.link;
         title.target = '_blank';
         title.rel = 'noreferrer noopener';
+        title.addEventListener('click', (event) => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          askOpenSite(article.link);
+        });
       }
       const tag = document.createElement('span');
       tag.className = 'new-tag';

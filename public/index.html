@@ -471,6 +471,17 @@
     </div>
   </dialog>
 
+  <!-- A new article not in an edition yet only exists on the publisher's
+       site, so say so before leaving for it. -->
+  <dialog id="site-dialog" class="dialog">
+    <h2>Article not fetched from feed yet</h2>
+    <p id="site-body" class="muted">Open the news site in a new tab?</p>
+    <div class="dialog-actions">
+      <button id="site-cancel" type="button" class="link">Cancel</button>
+      <button id="site-ok" type="button" class="primary">OK</button>
+    </div>
+  </dialog>
+
   <dialog id="wipe-dialog" class="dialog">
     <h2>Remove everything?</h2>
     <p id="wipe-body" class="muted"></p>
