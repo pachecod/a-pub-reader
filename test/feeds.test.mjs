@@ -12,7 +12,7 @@ import path from 'node:path';
 import { composeFeedHtml, decodeEntities, demoteHeadings, parseFeed, siteLabel, siteOf } from '../lib/rss.mjs';
 import { FeedStore, feedFilename, normalizeUrl, FEED_FOLDER } from '../lib/feeds.mjs';
 import { extractArticle } from '../lib/extract.mjs';
-import { DIRECTORY, discoverFeeds } from '../lib/discover.mjs';
+import { DIRECTORY, carriesFullText, discoverFeeds } from '../lib/discover.mjs';
 import { buildEpub } from '../lib/epub.mjs';
 import { JSDOM } from 'jsdom';
 import JSZip from 'jszip';
@@ -332,6 +332,23 @@ assert(byName.Alive.ok && byName.Alive.latest.title === 'Newest from https://ali
 assert(byName.Dead.ok === false && /503/.test(byName.Dead.error), 'a broken feed is reported, not thrown');
 assert(byName.Followed.following === true, 'a saved feed is recognised despite a trailing slash');
 assert(byName.Alive.following === false, 'an unsaved feed is not marked as followed');
+
+// Find feeds offers feeds that carry whole articles: an edition holds only
+// what the feed contains.
+const longText = `<p>${'A full sentence of the article, long enough to count. '.repeat(40)}</p>`;
+assert(carriesFullText({ items: Array.from({ length: 6 }, () => ({ html: longText })) }), 'a feed of whole articles carries full text');
+assert(!carriesFullText({ items: Array.from({ length: 6 }, () => ({ html: '<p>A one-line summary.</p>' })) }), 'a feed of summaries does not');
+const mixedDirectory = [{ group: 'Mixed', feeds: [
+  { name: 'Whole', url: 'https://whole.test/feed', about: 'full articles' },
+  { name: 'Teasers', url: 'https://teasers.test/feed', about: 'summaries' },
+  { name: 'Down', url: 'https://down.test/feed', about: 'not answering' },
+] }];
+const mixedFetch = async (url) => {
+  if (url.includes('down')) throw new Error('HTTP 503');
+  return { title: url, items: Array.from({ length: 5 }, (_, i) => ({ title: `Item ${i}`, html: url.includes('whole') ? longText : '<p>Teaser.</p>' })) };
+};
+const onlyFull = (await discoverFeeds({ directory: mixedDirectory, fetcher: mixedFetch, requireFullText: true }))[0].feeds.map((f) => f.name);
+assert(onlyFull.join() === 'Whole,Down', `a feed that now sends only summaries is left out (a down one still shows as unavailable): ${onlyFull.join()}`);
 
 await fs.rm(dir, { recursive: true, force: true });
 
