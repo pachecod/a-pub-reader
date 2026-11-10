@@ -173,7 +173,7 @@ A Boox (or any reader that syncs with Google Drive, OneDrive or Dropbox) is
 reached through a synced folder instead of Wi-Fi. With Google Drive for desktop
 installed and signed in, **Send via** offers **Google Drive (your account) —
 synced folder**. Sync Reader then copies into **My Drive/A-Pub Reader**, with
-`A-pub Books`, `A-pub Notes` and `A-pub Feeds` inside, and removes what is
+`A-pub Books`, `A-pub Documents`, `A-pub Notes` and `A-pub Feeds` inside, and removes what is
 switched off, just as on a card. On the Boox, sign in to the same Google
 account under its cloud storage and open that folder.
 
@@ -310,8 +310,11 @@ listed. A row's title opens its reading page, and on a book or note **×** forge
 it, asking first, as in the Library. Feed editions have no **×**: a feed is
 dropped under **Feeds**, and kept off the reader with its switch.
 
-Where each item goes on the reader is decided by what it is: books to
-`/A-pub Books`, notes to `/A-pub Notes` and feed editions to `/A-pub Feeds`.
+Where each item goes on the reader is decided by what it is: books from Find
+books to `/A-pub Books`, PDFs, web pages and links you convert to
+`/A-pub Documents`, notes to `/A-pub Notes` and feed editions to `/A-pub Feeds`.
+Documents converted before 2.0 went to `/A-pub Books`; the first sync after
+updating moves them to `/A-pub Documents`.
 A feed edition also carries the filename of the edition it replaces, so a sync
 that happens hours after the build still removes the right old file.
 

@@ -25,7 +25,7 @@ import { normalizeForDevice } from './lib/assets.mjs';
 import { feedFilename, normalizeUrl } from './lib/feeds.mjs';
 import { checkLimits, resolveLimits } from './lib/limits.mjs';
 import { ARTICLE_TTL_MS, FEED_TTL_MS, MemoryFetchCache, PgFetchCache, sharedFetcher } from './lib/store/fetchcache.mjs';
-import { BOOKS_FOLDER, FEED_FOLDER, NOTES_FOLDER } from './lib/folders.mjs';
+import { BOOKS_FOLDER, DOCS_FOLDER, FEED_FOLDER, NOTES_FOLDER, moveDocumentsToTheirFolder } from './lib/folders.mjs';
 import { DiskBlobs, S3Blobs } from './lib/store/blobs.mjs';
 import { LOCAL_OWNER, SHARED_OWNER, databaseBackend, fileBackend } from './lib/store/backend.mjs';
 import { migrate, openPostgres } from './lib/store/db.mjs';
@@ -461,14 +461,14 @@ async function finishImages(article, item, options, warnings) {
       lang: article.lang,
       source: article.source,
       pages: rendered.pages,
-      folder: item.folder || null,
+      folder: item.folder || DOCS_FOLDER,
     },
     [...warnings, ...rendered.warnings]
   );
 }
 
 /** Shared tail for both image paths: package, store pages, register the job. */
-async function finishImagePages({ title, byline, lang, source, pages, folder = null }, warnings) {
+async function finishImagePages({ title, byline, lang, source, pages, folder = DOCS_FOLDER }, warnings) {
   const { filename, buffer } = await buildImageEpub({ title, byline, lang, source, pages });
 
   const id = randomUUID();
@@ -531,9 +531,8 @@ async function finish(article, item, warnings) {
     title: article.title,
     ...stored,
     size: buffer.length,
-    // null means "whatever the Send controls are set to"; a note or a feed
-    // carries its own destination instead.
-    folder: item.folder || null,
+    // What you convert goes to A-pub Documents; a note carries its own folder.
+    folder: item.folder || DOCS_FOLDER,
     mode: 'text',
     chapters,
     source: item.source || { kind: item.draftId ? 'draft' : item.pdfBase64 ? 'pdf' : item.url ? 'url' : 'html', label: item.name || item.url || article.title },
@@ -1096,8 +1095,7 @@ const routes = {
           author: book.author || '',
           ...stored,
           size: buffer.length,
-          // Books follow the Send controls like any other queued file.
-          folder: null,
+          folder: BOOKS_FOLDER,
           mode: 'text',
           chapters,
           source: { kind: 'book', label, bookId: book.id || book.pageUrl || book.epubUrl, from: book.pageUrl || '' },
@@ -1342,11 +1340,13 @@ const routes = {
       },
     });
 
+    // The folder the first file went to; each result names its own.
+    const shownFolder = results.find((r) => r.ok)?.folder || folder;
     return json(200, {
       ok: results.every((r) => r.ok) && removed.every((r) => r.ok),
       host: volume.name,
-      folder,
-      path: targetDir(volume, folder),
+      folder: shownFolder,
+      path: targetDir(volume, shownFolder),
       results,
       removed,
     });
@@ -1396,7 +1396,8 @@ const routes = {
 
     const config = await readConfig();
     // Where a queued item goes is decided by what it is, not by a form field:
-    // notes and feeds carry their own folder, and everything else is a book.
+    // every item carries its folder; only entries from before 2.0 may have
+    // none, and those were books.
     const folder = BOOKS_FOLDER;
 
     let host;
@@ -1466,7 +1467,8 @@ const routes = {
     return json(200, {
       ok: results.every((r) => r.ok) && removed.every((r) => r.ok),
       host,
-      folder,
+      // The folder the first file went to; each result names its own.
+      folder: results.find((r) => r.ok)?.folder || folder,
       results,
       removed,
     });
@@ -1548,6 +1550,22 @@ const DEVICE_ROUTES = new Set([
 ]);
 
 /** Whose library a request works on. Accounts (Phase 2) decide this per user. */
+// Documents converted before 2.0 get their own reader folder, once per library
+// per run (see moveDocumentsToTheirFolder).
+const documentsMoved = new Set();
+async function moveDocumentsOnce() {
+  const library = stores();
+  if (documentsMoved.has(library.owner)) return;
+  documentsMoved.add(library.owner);
+  try {
+    const moved = await moveDocumentsToTheirFolder(library.outbox, library.removals);
+    if (moved) console.log(`  ${moved} document(s) now go to ${DOCS_FOLDER} on the reader.`);
+  } catch (err) {
+    documentsMoved.delete(library.owner);
+    console.warn(`  Could not give documents their reader folder: ${err.message}`);
+  }
+}
+
 function ownerFor(req) {
   return DEFAULT_OWNER;
 }
@@ -1573,6 +1591,8 @@ async function handleRequest(req, res) {
 
   // For the host's health checks, which come without the password.
   if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, 'text/plain', 'ok');
+
+  await moveDocumentsOnce();
 
   if (APP_PASSWORD && authFailures.blocked(ip).blocked) {
     res.setHeader('retry-after', String(authFailures.blocked(ip).retryAfter));

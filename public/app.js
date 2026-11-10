@@ -456,6 +456,7 @@ function renderResults(failures = []) {
 /** What a set of synced files were, counted by the folder each went to. */
 const KINDS = {
   '/A-pub Books': ['book', 'books'],
+  '/A-pub Documents': ['document', 'documents'],
   '/A-pub Notes': ['note', 'notes'],
   '/A-pub Feeds': ['feed edition', 'feed editions'],
 };

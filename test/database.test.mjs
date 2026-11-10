@@ -113,6 +113,33 @@ assert((await alice.removals.add({ folder: '/A-pub Books', filename: 'Old.epub' 
 assert((await alice.removals.list()).length === 1 && (await bob.removals.list()).length === 0, 'removals are per owner');
 assert(await alice.removals.remove('/A-pub Books', 'Old.epub'), 'a removal can be dropped');
 
+console.log('\n== documents get their own reader folder ==');
+{
+  const { moveDocumentsToTheirFolder, BOOKS_FOLDER, DOCS_FOLDER } = await import('../lib/folders.mjs');
+  const lib = hosted.forOwner('movers');
+  // Each with a file, as real entries have (a listing drops entries whose file is gone).
+  const put = async (entry) =>
+    lib.outbox.add({ mode: 'text', builtAt: new Date().toISOString(), ...entry, ...(await lib.outbox.saveEpub(entry.id, entry.filename, Buffer.from('epub'))) });
+  await put({ id: 'doc-unsent', filename: 'Unsent.epub', folder: null, source: { kind: 'pdf' } });
+  await put({ id: 'doc-sent', filename: 'Sent.epub', folder: null, deliveredAt: '2026-11-01T00:00:00Z', deliveredTo: 'reader', source: { kind: 'url' } });
+  await put({ id: 'doc-off', filename: 'Off.epub', folder: null, deliveredAt: '2026-11-01T00:00:00Z', onReader: false, source: { kind: 'html' } });
+  await put({ id: 'book', filename: 'Book.epub', folder: null, deliveredAt: '2026-11-01T00:00:00Z', source: { kind: 'book' } });
+  await put({ id: 'note', filename: 'Note.epub', folder: '/A-pub Notes', source: { kind: 'draft' } });
+  const moved = await moveDocumentsToTheirFolder(lib.outbox, lib.removals);
+  const get = (id) => lib.outbox.get(id);
+  assert(moved === 2, `two documents move to the new folder (${moved})`);
+  assert((await get('doc-unsent')).folder === DOCS_FOLDER, 'an unsent document will go to A-pub Documents');
+  const sent = await get('doc-sent');
+  assert(sent.folder === DOCS_FOLDER && !sent.deliveredAt, 'a sent document goes over again, into A-pub Documents');
+  const queued = await lib.removals.list();
+  assert(queued.length === 1 && queued[0].folder === BOOKS_FOLDER && queued[0].filename === 'Sent.epub', 'and its old copy in A-pub Books is queued to come off');
+  assert((await get('doc-off')).folder === BOOKS_FOLDER, 'one switched off stays recorded in A-pub Books, where its removal looks');
+  const book = await get('book');
+  assert(book.folder === BOOKS_FOLDER && book.deliveredAt, 'a downloaded book stays in A-pub Books, untouched');
+  assert((await get('note')).folder === '/A-pub Notes', 'notes keep their folder');
+  assert((await moveDocumentsToTheirFolder(lib.outbox, lib.removals)) === 0 && (await lib.removals.list()).length === 1, 'running it again changes nothing');
+}
+
 await alice.settings.set({ includeImages: false });
 assert((await alice.settings.get()).includeImages === false && Object.keys(await bob.settings.get()).length === 0, 'settings are per owner');
 

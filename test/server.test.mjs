@@ -305,10 +305,10 @@ try {
   });
   assert(send.body.ok === true, 'send reports success');
   // A folder in the request is ignored: where something lands follows what it
-  // is — a note or a feed carries its own folder, everything else is a book.
-  assert(send.body.folder === '/A-pub Books', `send ignored the requested folder: ${send.body.folder}`);
-  assert(sd.has('/A-pub Books'), 'the books folder was created on the device');
-  assert(sd.has('/A-pub Books/Framing the News.epub'), 'EPUB present on the device');
+  // is — a converted file goes to A-pub Documents, a note or a feed to its own.
+  assert(send.body.folder === '/A-pub Documents', `send ignored the requested folder: ${send.body.folder}`);
+  assert(sd.has('/A-pub Documents'), 'the documents folder was created on the device');
+  assert(sd.has('/A-pub Documents/Framing the News.epub'), 'EPUB present on the device');
 
   const stale = await api('/api/send', {
     method: 'POST',
@@ -342,7 +342,7 @@ try {
 
   const keepEntry = (await api('/api/outbox')).body.items.find((i) => i.deliveredAt);
   assert(Boolean(keepEntry), 'there is a delivered entry to forget');
-  assert(sd.has(`/A-pub Books/${keepEntry.filename}`), 'its file is on the device to begin with');
+  assert(sd.has(`/A-pub Documents/${keepEntry.filename}`), 'its file is on the device to begin with');
 
   // Forgetting without asking for the device leaves the reader's copy alone.
   const forgetLocal = await api('/api/outbox/remove', {
@@ -351,7 +351,7 @@ try {
   });
   assert(forgetLocal.body.ok === true, 'forgetting locally succeeds');
   assert(forgetLocal.body.pending === 0, 'nothing was queued for removal');
-  assert(sd.has(`/A-pub Books/${keepEntry.filename}`), "the reader's copy was left alone");
+  assert(sd.has(`/A-pub Documents/${keepEntry.filename}`), "the reader's copy was left alone");
 
   // Send it again so there is something delivered to forget properly.
   const rebuilt = await api('/api/convert', {
@@ -371,7 +371,7 @@ try {
     method: 'POST',
     body: JSON.stringify({ ids: [doomed.id], host: DEVICE_HOST }),
   });
-  assert(sd.has(`/A-pub Books/${doomed.filename}`), 'the doomed file reached the device');
+  assert(sd.has(`/A-pub Documents/${doomed.filename}`), 'the doomed file reached the device');
 
   const forgetBoth = await api('/api/outbox/remove', {
     method: 'POST',
@@ -379,7 +379,7 @@ try {
   });
   assert(forgetBoth.body.pending === 1, `the removal was queued: ${forgetBoth.body.pending}`);
   // Queued, not done: the reader may not be connected when you tidy up.
-  assert(sd.has(`/A-pub Books/${doomed.filename}`), 'the file is still there until a sync');
+  assert(sd.has(`/A-pub Documents/${doomed.filename}`), 'the file is still there until a sync');
 
   const queued = await api('/api/removals');
   assert(
@@ -395,7 +395,7 @@ try {
   });
   assert(sweep.status === 200, `a removal-only sync is accepted: ${sweep.status}`);
   assert(
-    !sd.has(`/A-pub Books/${doomed.filename}`),
+    !sd.has(`/A-pub Documents/${doomed.filename}`),
     'the sync deleted the forgotten file from the device'
   );
   assert(
@@ -425,7 +425,7 @@ try {
       }),
     })
   ).body.results.find((r) => r.ok);
-  const onDevice = () => sd.has(`/A-pub Books/${switched.filename}`);
+  const onDevice = () => sd.has(`/A-pub Documents/${switched.filename}`);
   const record = async () => (await api('/api/outbox')).body.items.find((i) => i.id === switched.id);
   const setSwitch = (on) =>
     api('/api/outbox/on-reader', { method: 'POST', body: JSON.stringify({ id: switched.id, on }) });
@@ -579,7 +579,7 @@ try {
       body: JSON.stringify({ ids: [entry.id], host: DEVICE_HOST }),
     });
   }
-  assert(sd.has('/A-pub Books/Wipe Me.epub'), 'two files staged on the device to wipe');
+  assert(sd.has('/A-pub Documents/Wipe Me.epub'), 'two files staged on the device to wipe');
 
   // Everything else the wipe should take: an unsent item, a followed feed, a
   // draft, and a stray file the queue no longer knows about.
