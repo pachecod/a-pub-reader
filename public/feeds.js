@@ -169,6 +169,37 @@
     }
   }
 
+  // ---- a new feed's first edition, built straight after adding it
+  //
+  // One at a time (adding several feeds in a row queues them), outside the
+  // Refresh all lock, and announced so the Library can show "Getting its
+  // first edition…" in the meantime.
+  const building = new Set();
+  let buildChain = Promise.resolve();
+  const announce = () => window.dispatchEvent(new CustomEvent('apub:feeds-building', { detail: { ids: [...building] } }));
+
+  function buildFirstEdition(feed) {
+    building.add(feed.id);
+    announce();
+    buildChain = buildChain.then(async () => {
+      try {
+        const data = await api('/api/feeds/refresh', { method: 'POST', body: JSON.stringify({ id: feed.id }) });
+        const result = data.results?.[0];
+        if (result && !result.ok) setStatus(`${feed.title || feed.url}: ${result.error}`, 'bad');
+        else setStatus(`${feed.title || feed.url} is in your Library.`, 'ok');
+        feeds = data.feeds || feeds;
+        render();
+      } catch (err) {
+        setStatus(`${feed.title || feed.url}: ${err.message}`, 'bad');
+      } finally {
+        building.delete(feed.id);
+        announce();
+        window.epubDropRead?.load?.();
+        window.epubDrop?.reloadQueue?.();
+      }
+    });
+  }
+
   async function addFeed() {
     const url = el.url.value.trim();
     if (!url) return;
@@ -184,7 +215,10 @@
       await load();
       if (!data.added) setStatus('That feed was already saved.');
       else if (data.warning) setStatus(`Saved, but: ${data.warning}`, 'bad');
-      else setStatus(`Added ${data.feed.title} — ${data.itemsAvailable} item(s) available. Hit Refresh to build it.`, 'ok');
+      else {
+        setStatus(`Added ${data.feed.title} — getting its first edition…`, 'ok');
+        buildFirstEdition(data.feed);
+      }
     } catch (err) {
       setStatus(err.message, 'bad');
     } finally {
@@ -380,10 +414,8 @@
     try {
       const data = await api('/api/feeds/add', { method: 'POST', body: JSON.stringify({ url: feed.url }) });
       await load();
-      discoverStatus(
-        data.added ? `Added ${feed.name}. Hit Refresh on it (or Refresh all) to build an edition.` : `${feed.name} was already saved.`,
-        'ok'
-      );
+      discoverStatus(data.added ? `Added ${feed.name} — getting its first edition…` : `${feed.name} was already saved.`, 'ok');
+      if (data.added && !data.warning) buildFirstEdition(data.feed);
     } catch (err) {
       button.disabled = false;
       button.textContent = 'Add';
@@ -418,6 +450,8 @@
       refreshFeeds();
       return true;
     },
+    /** Feeds whose first edition is being built right now. */
+    building: () => [...building],
   };
 
   // Feeds refresh only when asked (Refresh feeds in the Library, Refresh all

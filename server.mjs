@@ -310,17 +310,17 @@ async function fetchFeedShared(url) {
   if (await optedOut(url)) throw httpError(403, OPTED_OUT_MESSAGE);
   const key = normalizeUrl(url) || url;
   // From the cache, a feed's dates are text again; withDates restores them.
-  return withDates(
-    await shared(`feed:${key}`, FEED_REUSE_MS, async () => {
-      const last = await fetchCache.get(`feedmeta:${key}`, VALIDATORS_MS).catch(() => null);
-      const fetched = await fetchFeed(url, last ? { etag: last.etag, lastModified: last.lastModified } : {});
-      if (fetched.notModified && last?.feed) return last.feed;
-      if (fetched.etag || fetched.lastModified) {
-        await fetchCache.set(`feedmeta:${key}`, { etag: fetched.etag, lastModified: fetched.lastModified, feed: fetched }).catch(() => {});
-      }
-      return fetched;
-    })
-  );
+  const load = async () => {
+    const last = await fetchCache.get(`feedmeta:${key}`, VALIDATORS_MS).catch(() => null);
+    const fetched = await fetchFeed(url, last ? { etag: last.etag, lastModified: last.lastModified } : {});
+    if (fetched.notModified && last?.feed) return last.feed;
+    if (fetched.etag || fetched.lastModified) {
+      await fetchCache.set(`feedmeta:${key}`, { etag: fetched.etag, lastModified: fetched.lastModified, feed: fetched }).catch(() => {});
+    }
+    return fetched;
+  };
+  // No reuse wanted (your own computer): always ask, never a copy kept moments ago.
+  return withDates(FEED_REUSE_MS ? await shared(`feed:${key}`, FEED_REUSE_MS, load) : await load());
 }
 
 // A fetched article's text is kept for a few hours, for that library only: a

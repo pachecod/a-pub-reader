@@ -179,6 +179,10 @@
   // The summaries last shown, so a reload redraws them at once rather than
   // flashing the compact cards while new ones arrive.
   let lastReading = { items: [] };
+  // The last items and followed feeds drawn, for redrawing when a feed's
+  // first edition starts or finishes building.
+  let lastItems = [];
+  let followedFeeds = [];
 
   async function load() {
     el.refresh.disabled = true;
@@ -188,7 +192,9 @@
       // straight away with the summaries already known, then again when the
       // new ones arrive. Without summaries, the compact cards still work.
       const reading = api('/api/reading').catch(() => null);
-      const { items } = await api('/api/outbox');
+      const [{ items }, followed] = await Promise.all([api('/api/outbox'), api('/api/feeds').catch(() => ({ feeds: [] }))]);
+      lastItems = items;
+      followedFeeds = followed.feeds || [];
       draw(items, lastReading);
 
       if (pendingEpub) {
@@ -211,6 +217,51 @@
     }
   }
 
+  /** A followed feed with no edition yet: its first one is on the way, or it needs a refresh. */
+  function waitingBlock(feed, buildingNow) {
+    const li = document.createElement('li');
+    li.className = 'library-block feed-waiting';
+    li.dataset.feedId = feed.id;
+    const block = document.createElement('article');
+    block.className = 'reading-feed';
+    const head = document.createElement('header');
+    head.className = 'reading-feed-head';
+    const name = document.createElement('span');
+    name.className = 'reading-feed-name';
+    name.textContent = feed.title || feed.url;
+    head.appendChild(name);
+    const note = document.createElement('p');
+    note.className = 'feed-waiting-note';
+    if (buildingNow) {
+      const spin = document.createElement('span');
+      spin.className = 'spinner';
+      spin.setAttribute('aria-hidden', 'true');
+      note.append(spin, 'Getting its first edition…');
+      note.setAttribute('role', 'status');
+    } else {
+      note.textContent = feed.lastError ? `No edition yet: ${feed.lastError} ` : 'No edition yet. ';
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.className = 'link';
+      again.textContent = 'Refresh feeds';
+      again.addEventListener('click', () => el.refresh.click());
+      note.appendChild(again);
+    }
+    block.append(head, note);
+    li.appendChild(block);
+    return li;
+  }
+
+  // A feed's first edition started or finished building: redraw the Library.
+  window.addEventListener('apub:feeds-building', () => {
+    api('/api/feeds')
+      .then((data) => {
+        followedFeeds = data.feeds || followedFeeds;
+        draw(lastItems, lastReading);
+      })
+      .catch(() => draw(lastItems, lastReading));
+  });
+
   /** Draw every section of the Library from the items and their summaries. */
   function draw(items, reading) {
     {
@@ -228,6 +279,9 @@
         seenFeeds.add(key);
         return true;
       });
+      // Followed feeds with no edition yet: being built now, or waiting.
+      const buildingNow = new Set(window.epubDropFeeds?.building?.() || []);
+      const waiting = followedFeeds.filter((f) => !seenFeeds.has(f.id));
       const notes = items.filter((i) => i.source?.kind === 'draft');
       // Books come from Find books; documents are what you converted yourself.
       const books = items.filter((i) => i.source?.kind === 'book');
@@ -235,7 +289,7 @@
 
       // With nothing built at all, the small "nothing here" notes are useless.
       // Replace the lists with one panel that says how to get content instead.
-      const nothingYet = books.length === 0 && docs.length === 0 && feeds.length === 0 && notes.length === 0;
+      const nothingYet = books.length === 0 && docs.length === 0 && feeds.length === 0 && notes.length === 0 && waiting.length === 0;
       el.onboarding.hidden = !nothingYet;
       el.booksSection.hidden = nothingYet;
       el.docsSection.hidden = nothingYet;
@@ -246,9 +300,9 @@
       el.feedsSection.hidden = nothingYet;
 
       el.booksCount.textContent = books.length ? `· ${books.length}` : '';
-      el.feedsCount.textContent = feeds.length ? `· ${feeds.length}` : '';
+      el.feedsCount.textContent = feeds.length + waiting.length ? `· ${feeds.length + waiting.length}` : '';
       el.booksEmpty.hidden = books.length > 0;
-      el.feedsEmpty.hidden = feeds.length > 0;
+      el.feedsEmpty.hidden = feeds.length + waiting.length > 0;
       // An empty section has its own buttons; a filled one gets a link below it.
       el.booksMore.hidden = books.length === 0;
       el.feedsMore.hidden = feeds.length === 0;
@@ -270,7 +324,7 @@
       el.books.replaceChildren(...books.map(draw));
       el.docs.replaceChildren(...docs.map(draw));
       el.notes.replaceChildren(...notes.map(draw));
-      el.feeds.replaceChildren(...feeds.map(draw));
+      el.feeds.replaceChildren(...waiting.map((f) => waitingBlock(f, buildingNow.has(f.id))), ...feeds.map(draw));
       showNewCounts();
     }
   }
