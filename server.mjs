@@ -19,6 +19,7 @@ import JSZip from 'jszip';
 
 import { extractArticle } from './lib/extract.mjs';
 import { runPdfJob } from './lib/pdfjob.mjs';
+import { shrinkPictures } from './lib/picturejob.mjs';
 import { buildEpub, buildImageEpub, safeFilename } from './lib/epub.mjs';
 import { PANEL, htmlToBlocks, renderBlocksToPages } from './lib/render.mjs';
 import { normalizeForDevice } from './lib/assets.mjs';
@@ -870,13 +871,15 @@ async function refreshTargets(targets, { manual = false } = {}) {
 // ---- pictures for a feed edition's articles (the web view's thumbnails)
 //
 // The picture each item names in the feed is downloaded once, while the
-// edition is built, and kept with the edition as it came (JPEG, PNG, WebP or
-// GIF, up to 1.5 MB; anything else or larger is skipped); the app serves it
-// from there, so the publisher's server is not asked again each time someone
-// looks, and does not see who reads what. Pictures are not decoded or resized
-// here: that takes a lot of memory, and a small hosted server ran out of it
-// during refreshes. The browser sizes them. The EPUB stays text-only.
-const IMAGE_BYTES = 1.5 * 1024 * 1024;
+// edition is built, and kept with the edition; the app serves it from there,
+// so the publisher's server is not asked again each time someone looks, and
+// does not see who reads what. Small pictures are kept as they came; larger
+// ones (some feeds link 2-4 MB originals) are made JPEGs of at most 960 px
+// by sharp in short-lived child processes, a few at a time (lib/picturejob),
+// so the main server never decodes an image: doing that in-process ran a
+// small Render server out of memory. The EPUB stays text-only.
+const IMAGE_BYTES = 6 * 1024 * 1024;
+const KEEP_AS_IS_BYTES = 250 * 1024;
 
 /** A picture's type from its first bytes, or '' if it is not one the web view shows. */
 function pictureType(data) {
@@ -916,6 +919,16 @@ async function fetchArticleImages(items) {
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, items.length) }, worker));
+
+  // Shrink the big ones in child processes; one that cannot be shrunk is dropped.
+  const big = [...found].filter(([, data]) => data.length > KEEP_AS_IS_BYTES);
+  if (big.length) {
+    const smaller = await shrinkPictures(big.map(([, data]) => data)).catch(() => []);
+    big.forEach(([n], i) => {
+      if (smaller[i]?.length && pictureType(smaller[i])) found.set(n, smaller[i]);
+      else found.delete(n);
+    });
+  }
   return found;
 }
 
