@@ -507,6 +507,7 @@
       li.querySelector('.reading-new')?.remove();
       const fresh = newArticles.get(li.dataset.feedId) || [];
       if (fresh.length) li.querySelector('.reading-articles')?.before(newList(fresh));
+      li.querySelector('.reading-feed')?.paginate?.();
 
       if (!count) {
         chip?.remove();

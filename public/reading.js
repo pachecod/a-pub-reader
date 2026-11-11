@@ -4,15 +4,17 @@
 //
 // A feed's newest edition is laid out like a front page — its articles'
 // headlines, bylines and openings, each linking straight to that article on
-// its reading page, the first few at once with "Show all" for the rest. A book
+// its reading page, five at a time with Previous / Next, so every feed's box
+// is the same height. A book
 // shows its cover, author and description; a note its opening. The summaries
 // come from /api/reading; read.js adds a forget control to books and notes.
 
 (function () {
-  /** How many of an edition's articles show before "Show all". */
-  const FIRST_ARTICLES = 5;
-  // Editions opened with "Show all", kept while the page is open.
-  const expanded = new Set();
+  /** How many articles a feed's box shows at a time. */
+  const PER_PAGE = 5;
+  // The page each feed's box is on, kept while the page is open (the Library
+  // redraws when it refreshes).
+  const pageOf = new Map();
 
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   /** A reading page, at a chapter if one is given. */
@@ -62,11 +64,12 @@
     );
     block.appendChild(head);
 
+    // The articles, in a box tall enough for five, so boxes line up. read.js
+    // may put not-yet-fetched articles above them; those page along too.
+    const pages = node('div', 'reading-pages');
     const list = node('ol', 'reading-articles');
-    const showAll = expanded.has(item.id);
-    item.articles.forEach((article, i) => {
+    item.articles.forEach((article) => {
       const li = node('li', 'reading-article');
-      if (!showAll && i >= FIRST_ARTICLES) li.hidden = true;
       // The article's picture from the feed, styled like a book's cover.
       if (article.image) {
         li.classList.add('has-thumb');
@@ -88,24 +91,38 @@
       li.appendChild(body);
       list.appendChild(li);
     });
-    block.appendChild(list);
+    pages.appendChild(list);
+    block.appendChild(pages);
 
-    const rest = item.articles.length - FIRST_ARTICLES;
-    if (rest > 0) {
-      const more = node('button', 'link reading-more', showAll ? 'Show fewer' : `Show all ${item.articles.length}`);
-      more.type = 'button';
-      more.setAttribute('aria-expanded', String(showAll));
-      more.addEventListener('click', () => {
-        const open = !expanded.has(item.id);
-        if (open) expanded.add(item.id);
-        else expanded.delete(item.id);
-        [...list.children].forEach((li, i) => (li.hidden = !open && i >= FIRST_ARTICLES));
-        more.textContent = open ? 'Show fewer' : `Show all ${item.articles.length}`;
-        more.setAttribute('aria-expanded', String(open));
-        if (!open) block.scrollIntoView({ block: 'nearest' });
-      });
-      block.appendChild(more);
-    }
+    // Previous / Next. The bar is always there (empty with one page), so a
+    // short feed's box is as tall as a long one's.
+    const pager = node('nav', 'reading-pager');
+    pager.setAttribute('aria-label', `${item.title} articles`);
+    const prev = node('button', 'reading-page-btn', '‹ Previous');
+    const next = node('button', 'reading-page-btn', 'Next ›');
+    const where = node('span', 'reading-page-where');
+    where.setAttribute('aria-live', 'polite');
+    prev.type = next.type = 'button';
+    pager.append(prev, where, next);
+    block.appendChild(pager);
+
+    /** Show one page (by default the one this box was on). */
+    block.paginate = (page = pageOf.get(item.id) || 0) => {
+      const rows = [...pages.querySelectorAll('.reading-article')];
+      const count = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+      page = Math.min(Math.max(0, page), count - 1);
+      pageOf.set(item.id, page);
+      rows.forEach((li, i) => (li.hidden = Math.floor(i / PER_PAGE) !== page));
+      // A list whose rows are all on other pages takes no room.
+      pages.querySelectorAll('ol').forEach((ol) => (ol.hidden = ![...ol.children].some((li) => !li.hidden)));
+      pager.classList.toggle('is-single', count === 1);
+      prev.disabled = page === 0;
+      next.disabled = page === count - 1;
+      where.textContent = count > 1 ? `${page + 1} of ${count}` : '';
+    };
+    prev.addEventListener('click', () => block.paginate((pageOf.get(item.id) || 0) - 1));
+    next.addEventListener('click', () => block.paginate((pageOf.get(item.id) || 0) + 1));
+    block.paginate();
     return block;
   }
 

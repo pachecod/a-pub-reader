@@ -811,7 +811,47 @@ a { color: var(--accent); }
   overflow: hidden;
 }
 .reading-excerpt-long { -webkit-line-clamp: 5; }
-.reading-more { margin-top: 0.35rem; font-size: 0.82rem; }
+/* A feed's box shows five articles at a time, each row the same height
+   (headline up to two lines, byline one, opening two), so all the boxes on
+   the Library are the same height; Previous / Next pages through the rest. */
+.reading-feed { --article-h: 8.9rem; display: flex; flex-direction: column; }
+.reading-pages { min-height: calc(5 * var(--article-h)); }
+.reading-pages .reading-article { box-sizing: border-box; height: var(--article-h); overflow: hidden; }
+.reading-pages .reading-article:last-child,
+.reading-pages .reading-article:has(+ .reading-article[hidden]) { border-bottom: 0; }
+.reading-pages .reading-article-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.reading-pages .reading-article.is-new .reading-article-title { display: inline; }
+.reading-pages .reading-byline { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reading-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2rem;
+  margin-top: auto;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.82rem;
+}
+.reading-pager.is-single > * { visibility: hidden; }
+.reading-page-where { color: var(--muted); }
+.reading-page-btn {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reading-page-btn:hover:not(:disabled) { background: var(--panel-2); }
+.reading-page-btn:disabled { color: var(--muted); opacity: 0.5; cursor: default; }
 .reading-item { display: flex; gap: 0.9rem; padding: 0.85rem 1rem; }
 .reading-cover-link { flex: none; }
 .reading-cover {
